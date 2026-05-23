@@ -37,7 +37,7 @@ Directories like `node_modules`, `.git`, `dist`, `build`, `.venv` are skipped au
 
 ### Data location
 
-Vector store and cloned repos live at `~/.hermes/rag-mcp-server/`.
+Vector store and cloned repos live at `~/.rag-mcp-server/`.
 
 ## Development
 

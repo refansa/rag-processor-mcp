@@ -105,10 +105,9 @@ export async function indexRepo(
     throw new Error("Indexing cancelled");
   }
 
-  // Atomic swap: remove old entries for this repo, add new ones
+  // Save repo metadata first so FK constraint is satisfied, then overwrite entries
   progress("store", 0, storeEntries.length, `Storing ${storeEntries.length} entries...`);
   console.error(`[indexer] Storing ${storeEntries.length} entries...`);
-  await store.entry.overwriteRepoEntries(repoName, storeEntries);
 
   await store.repo.save({
     chunkCount: storeEntries.length,
@@ -116,6 +115,8 @@ export async function indexRepo(
     repoName,
     repoUrl: repoRef,
   });
+
+  await store.entry.overwriteRepoEntries(repoName, storeEntries);
 
   const total = await store.entry.totalEntries();
   console.error(`[indexer] Done. Total vector store: ${total} entries`);

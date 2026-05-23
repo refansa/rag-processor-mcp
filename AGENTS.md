@@ -69,7 +69,7 @@ Every tool handler file follows the same structure:
 
 ### Import style
 
-- Internal imports use `.js` extension (ESM convention): `import { ... } from "../core/store.js"`
+- Internal imports use `.js` extension (ESM convention): `import { ... } from "../core/store/index/index.js"`
 - Zod used for input schema definitions in tool handlers
 - `@modelcontextprotocol/sdk` imports from `.../mcp.js` subpath
 
@@ -96,12 +96,12 @@ const cfg = getConfig();
 // cfg.dataDir, cfg.reposDir, cfg.embedderModel, cfg.chunkSize, etc.
 ```
 
-All hardcoded constants are in `src/core/config.ts`. Override via `~/.hermes/rag-mcp-server/config.json` or `RAG_MCP_*` env vars.
+All hardcoded constants are in `src/core/config.ts`. Override via `~/.rag-mcp-server/config.json` or `RAG_MCP_*` env vars.
 
 ### Atomic replace — no data-loss window
 
 ```ts
-// core/store.ts — single write removes old + adds new entries
+// core/store/index.ts — single write removes old + adds new entries
 replaceRepoEntries(repoName, newEntries);
 // NOT: removeRepo() + addEntries() — that's two writes with a loss window
 ```
@@ -141,7 +141,7 @@ Check `extra.signal.aborted` periodically and throw if cancelled.
 ### Atomic JSON persistence
 
 ```ts
-// core/store.ts — write to temp file, then rename
+// core/store/index.ts — write to temp file, then rename
 const tmp = filePath + ".tmp." + process.pid;
 fs.writeFileSync(tmp, data, "utf-8");
 fs.renameSync(tmp, filePath);
@@ -192,11 +192,11 @@ npm run test:watch   # watch mode for TDD
 
 ```
 index_repo("https://github.com/user/repo.git")
-  → resolver.ts: clone or pull to ~/.hermes/rag-mcp-server/repos/
+  → resolver.ts: clone or pull to ~/.rag-mcp-server/repos/
   → scanner.ts: walk files (skip excluded dirs >50KB, non-code exts)
   → chunker.ts: split into overlapping 1K-char chunks
   → embedder.ts: all-MiniLM-L6-v2 batch embedding
-  → store.ts: atomic JSON write to ~/.hermes/rag-mcp-server/entries.json
+  → store.ts: atomic JSON write to ~/.rag-mcp-server/entries.json
 
 search_codebase("logging pattern", n_results=5)
   → embedder.ts: embed query
@@ -206,7 +206,7 @@ search_codebase("logging pattern", n_results=5)
 
 ## Data location
 
-All persistent data under `~/.hermes/rag-mcp-server/`:
+All persistent data under `~/.rag-mcp-server/`:
 - `entries.json` — vector store (id, text, embedding, metadata)
 - `repos.json` — indexed repo registry
 - `repos/` — cloned remote repositories
@@ -227,7 +227,7 @@ If you're an AI agent working on this codebase:
 
 - **Stay in the domain pattern.** New features go in the right directory: tools in `tools/`, pipeline logic in `indexing/`, shared primitives in `core/`.
 - **One concern per file.** If a tool handler gets complex, extract the business logic into `indexing/` or `core/`, not into the tool file.
-- **Use the existing patterns.** New tool? Copy `src/tools/search.ts` structure. New store operation? Extend `src/core/store.ts`.
+- **Use the existing patterns.** New tool? Copy `src/tools/search.ts` structure. New store operation? Extend `src/core/store/index.ts`.
 - **No default exports.** Named exports everywhere.
 - **ESM `.js` extension** on all internal imports.
 - **Run `npm run lint:fix` and `npm run format`** before committing.

@@ -3,7 +3,7 @@
  *
  * Priority (highest wins):
  *   1. Environment variables (RAG_MCP_*)
- *   2. JSON config file (default: ~/.hermes/rag-mcp-server/config.json)
+ *   2. JSON config file (default: ~/.rag-mcp-server/config.json)
  *   3. Hardcoded defaults
  */
 
@@ -60,7 +60,7 @@ export interface Config {
 // ── Defaults ────────────────────────────────────────────────────────────
 
 const HOME = process.env.HOME || os.homedir();
-const DEFAULT_DATA_DIR = path.join(HOME, ".hermes", "rag-mcp-server");
+const DEFAULT_DATA_DIR = path.join(HOME, ".rag-mcp-server");
 
 export const DEFAULT_CONFIG: Config = {
   store: {

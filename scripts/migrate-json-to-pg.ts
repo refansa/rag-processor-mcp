@@ -14,8 +14,9 @@ import * as os from "node:os";
 import { Pool } from "pg";
 
 const HOME = process.env.HOME || os.homedir();
-const DATA_DIR = process.env.RAG_MCP_DATA_DIR || path.join(HOME, ".hermes", "rag-mcp-server");
-const STORE_URL = process.env.RAG_MCP_STORE_URL || "postgresql://localhost:5432/rag_mcp";
+const DATA_DIR = process.env.RAG_MCP_DATA_DIR || path.join(HOME, ".rag-mcp-server");
+const STORE_URL =
+  process.env.RAG_MCP_STORE_URL || "postgresql://postgres:postgres@localhost:5432/rag_mcp";
 
 const ENTRIES_JSON = path.join(DATA_DIR, "entries.json");
 const REPOS_JSON = path.join(DATA_DIR, "repos.json");
