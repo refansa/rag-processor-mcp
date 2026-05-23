@@ -23,7 +23,9 @@ src/
     ├── index.ts           #   Barrel: registerTools()
     ├── search.ts          #   search_codebase tool
     ├── index-repo.ts      #   index_repo tool
-    └── list-repos.ts      #   list_indexed_repos tool
+    ├── list-repos.ts      #   list_indexed_repos tool
+    ├── get-file-content.ts #   get_file_content tool
+    └── remove-repo.ts     #   remove_repo tool
 ```
 
 ### Dependency direction
@@ -216,6 +218,8 @@ All persistent data under `~/.hermes/rag-mcp-server/`:
 | `index_repo` | `repo_url: string` | `{ status, repo, files, chunks }` |
 | `search_codebase` | `query: string`, `n_results?: number` | `{ results, total }` |
 | `list_indexed_repos` | — | `{ repos, total }` |
+| `get_file_content` | `repo_name: string`, `file_path: string` | `{ repo, file, ext, content, totalChunks }` |
+| `remove_repo` | `repo_name: string` | `{ status, repo }` |
 
 ## AGENTS.md conventions for this repo
 

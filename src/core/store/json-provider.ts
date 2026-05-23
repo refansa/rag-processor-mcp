@@ -44,6 +44,12 @@ export class JsonProvider implements StoreProvider {
 
   // ── Entry operations ────────────────────────────────────────────────
 
+  async getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]> {
+    return this.entries
+      .filter((e) => e.metadata.repoName === repoName && e.metadata.filePath === filePath)
+      .toSorted((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
+  }
+
   async searchSimilar(
     queryEmbedding: number[],
     take: number,

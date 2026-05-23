@@ -11,6 +11,8 @@ interface PgEntryRow {
   repo_name: string;
   file_path: string;
   ext: string;
+  chunk_index: number;
+  total_chunks: number;
   text: string;
   score: string;
 }
@@ -82,6 +84,32 @@ export class PgProvider implements StoreProvider {
   }
 
   // ── Entry operations ────────────────────────────────────────────────
+
+  async getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]> {
+    const sql = `
+      SELECT id, repo_name, file_path, ext, chunk_index, total_chunks, text
+      FROM store_entries
+      WHERE repo_name = $1 AND file_path = $2
+      ORDER BY chunk_index ASC
+    `;
+    try {
+      const result = await this.pool.query(sql, [repoName, filePath]);
+      return result.rows.map((row) => ({
+        id: row.id,
+        text: row.text,
+        embedding: [],
+        metadata: {
+          chunkIndex: row.chunk_index,
+          ext: row.ext,
+          filePath: row.file_path,
+          repoName: row.repo_name,
+          totalChunks: row.total_chunks,
+        },
+      }));
+    } catch (err) {
+      throw new StoreError("Failed to get file entries", err);
+    }
+  }
 
   async searchSimilar(
     queryEmbedding: number[],

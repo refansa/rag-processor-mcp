@@ -15,6 +15,8 @@ export interface StoreProvider {
     where?: SearchWhere,
   ): Promise<SearchResult[]>;
 
+  getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]>;
+
   insertOne(entry: StoreEntry): Promise<void>;
   insertBatch(entries: StoreEntry[]): Promise<void>;
   overwriteRepoEntries(repoName: string, entries: StoreEntry[]): Promise<void>;

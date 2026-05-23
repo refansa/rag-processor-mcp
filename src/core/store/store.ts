@@ -1,5 +1,6 @@
 import type { IndexedRepo, SearchResult, StoreEntry } from "../types.js";
 import type { SearchWhere, StoreProvider } from "./provider.js";
+import { CHUNK_OVERLAP } from "../../indexing/chunker.js";
 import { JsonProvider } from "./json-provider.js";
 import { PgProvider } from "./pg-provider.js";
 
@@ -60,6 +61,35 @@ export class EntryStore {
 
   removeRepoEntries(repoName: string): Promise<void> {
     return this.provider.removeRepoEntries(repoName);
+  }
+
+  async getFileContent(
+    repoName: string,
+    filePath: string,
+  ): Promise<{
+    repo: string;
+    file: string;
+    ext: string;
+    content: string;
+    totalChunks: number;
+  } | null> {
+    const chunks = await this.provider.getFileEntries(repoName, filePath);
+    if (chunks.length === 0) {
+      return null;
+    }
+
+    let content = chunks[0].text;
+    for (let i = 1; i < chunks.length; i++) {
+      content += chunks[i].text.slice(CHUNK_OVERLAP);
+    }
+
+    return {
+      content,
+      ext: chunks[0].metadata.ext,
+      file: filePath,
+      repo: repoName,
+      totalChunks: chunks.length,
+    };
   }
 
   totalEntries(): Promise<number> {
