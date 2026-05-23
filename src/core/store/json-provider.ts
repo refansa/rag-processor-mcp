@@ -55,9 +55,16 @@ export class JsonProvider implements StoreProvider {
     take: number,
     _where?: SearchWhere,
   ): Promise<SearchResult[]> {
-    const candidates = _where?.repo
-      ? this.entries.filter((e) => e.metadata.repoName === _where.repo)
-      : this.entries;
+    const ext = _where?.ext?.toLowerCase();
+    const candidates = this.entries.filter((e) => {
+      if (_where?.repo && e.metadata.repoName !== _where.repo) {
+        return false;
+      }
+      if (ext && e.metadata.ext !== ext) {
+        return false;
+      }
+      return true;
+    });
 
     const scored = candidates
       .map((entry) => ({

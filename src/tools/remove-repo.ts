@@ -27,7 +27,6 @@ function handleRemoveRepo(store: Store) {
     }
 
     await store.repo.removeOne(repo_name);
-    await store.entry.removeRepoEntries(repo_name);
 
     return textResponse({ repo: repo_name, status: "ok" });
   };

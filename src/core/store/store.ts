@@ -1,8 +1,8 @@
 import type { IndexedRepo, SearchResult, StoreEntry } from "../types.js";
 import type { SearchWhere, StoreProvider } from "./provider.js";
-import { CHUNK_OVERLAP } from "../../indexing/chunker.js";
 import { JsonProvider } from "./json-provider.js";
 import { PgProvider } from "./pg-provider.js";
+import { getConfig } from "../config.js";
 
 export interface StoreOptions {
   provider: "json" | "postgresql";
@@ -35,9 +35,11 @@ export class Store {
 
 export class EntryStore {
   private readonly provider: StoreProvider;
+  private readonly chunkOverlap: number;
 
   constructor(provider: StoreProvider) {
     this.provider = provider;
+    this.chunkOverlap = getConfig().chunkOverlap;
   }
 
   searchSimilar(
@@ -80,7 +82,7 @@ export class EntryStore {
 
     let content = chunks[0].text;
     for (let i = 1; i < chunks.length; i++) {
-      content += chunks[i].text.slice(CHUNK_OVERLAP);
+      content += chunks[i].text.slice(this.chunkOverlap);
     }
 
     return {

@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { z } from "zod";
 import type { RepoStore } from "../core/store/index.js";
-import { textResponse } from "../core/response.js";
+import { errorResponse, textResponse } from "../core/response.js";
 
 // --- Config ---
 
@@ -10,8 +12,12 @@ const DESCRIPTION = "List all repositories currently indexed in the vector store
 
 function handleListRepos(repoStore: RepoStore) {
   return async () => {
-    const repos = await repoStore.listAll();
-    return textResponse({ repos, total: repos.length });
+    try {
+      const repos = await repoStore.listAll();
+      return textResponse({ repos, total: repos.length });
+    } catch (error) {
+      return errorResponse(error instanceof Error ? error.message : String(error));
+    }
   };
 }
 
@@ -22,7 +28,7 @@ export function registerListReposTool(server: McpServer, repoStore: RepoStore): 
     "list_indexed_repos",
     {
       description: DESCRIPTION,
-      inputSchema: {},
+      inputSchema: z.object({}) as unknown as AnySchema,
     },
     handleListRepos(repoStore),
   );
