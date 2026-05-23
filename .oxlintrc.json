@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "warn",
+    "style": "warn"
+  },
+  "plugins": [
+    "import",
+    "unicorn",
+    "typescript"
+  ],
+  "rules": {
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    "import/no-default-export": "off",
+    "import/group-exports": "off",
+    "import/no-namespace": "off",
+    "import/no-nodejs-modules": "off",
+    "unicorn/no-null": "off",
+    "unicorn/numeric-separators-style": "off",
+    "unicorn/text-encoding-identifier-case": "off",
+    "unicorn/catch-error-name": "off",
+    "eslint/sort-keys": "off",
+    "eslint/sort-imports": "off",
+    "eslint/func-style": "off",
+    "eslint/no-magic-numbers": "off",
+    "eslint/max-statements": "off",
+    "eslint/no-ternary": "off",
+    "eslint/capitalized-comments": "off",
+    "eslint/id-length": "off",
+    "eslint/init-declarations": "off",
+    "eslint/no-underscore-dangle": "off",
+    "typescript/no-inferrable-types": "off",
+    "eslint/prefer-destructuring": "off"
+  }
+}

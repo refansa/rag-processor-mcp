@@ -1,0 +1,45 @@
+{
+  "name": "rag-processor-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for semantic search over code repositories — conventions, utilities, project structures",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc && node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write src/",
+    "format:check": "oxfmt --check src/",
+    "inspect": "mcp-inspector -- node dist/server.js",
+    "inspect:cli": "mcp-inspector --cli -- node dist/server.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "oxlint --fix",
+      "oxfmt --write"
+    ]
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@xenova/transformers": "^2.17.0",
+    "simple-git": "^3.27.0"
+  },
+  "overrides": {
+    "protobufjs": "^7.2.6"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "^0.21.2",
+    "@types/node": "^22.19.19",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.7"
+  }
+}

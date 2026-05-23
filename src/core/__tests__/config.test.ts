@@ -1,0 +1,86 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Store original env so we can restore after each test
+const ORIGINAL_ENV = { ...process.env };
+
+beforeEach(() => {
+  vi.resetModules();
+  // Clear any RAG_MCP_* env vars between tests
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("RAG_MCP_")) {
+      delete process.env[key];
+    }
+  }
+});
+
+// Restore env after all tests
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+});
+
+describe("config defaults", () => {
+  it("provides sensible defaults", async () => {
+    const { getConfig } = await import("../config.js");
+    const cfg = getConfig();
+
+    expect(cfg.embedderModel).toBe("Xenova/all-MiniLM-L6-v2");
+    expect(cfg.chunkSize).toBe(1000);
+    expect(cfg.chunkOverlap).toBe(200);
+    expect(cfg.embeddingBatchSize).toBe(50);
+    expect(cfg.maxFileBytes).toBe(50_000);
+    expect(cfg.defaultResults).toBe(5);
+    expect(cfg.maxResults).toBe(20);
+    expect(cfg.snippetMaxChars).toBe(500);
+  });
+
+  it("includes known file extensions", async () => {
+    const { getConfig } = await import("../config.js");
+    const cfg = getConfig();
+
+    expect(cfg.includeExts).toContain(".ts");
+    expect(cfg.includeExts).toContain(".py");
+    expect(cfg.includeExts).toContain(".go");
+    expect(cfg.includeExts).toContain(".rs");
+  });
+
+  it("excludes common build artifacts", async () => {
+    const { getConfig } = await import("../config.js");
+    const cfg = getConfig();
+
+    expect(cfg.excludeDirs).toContain("node_modules");
+    expect(cfg.excludeDirs).toContain(".git");
+    expect(cfg.excludeDirs).toContain("dist");
+  });
+});
+
+describe("config env overrides", () => {
+  it("overrides dataDir via RAG_MCP_DATA_DIR", async () => {
+    process.env.RAG_MCP_DATA_DIR = "/tmp/rag-test";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.dataDir).toBe("/tmp/rag-test");
+    expect(cfg.reposDir).toBe("/tmp/rag-test/repos");
+  });
+
+  it("overrides numeric values via env", async () => {
+    process.env.RAG_MCP_CHUNK_SIZE = "500";
+    process.env.RAG_MCP_BATCH_SIZE = "10";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.chunkSize).toBe(500);
+    expect(cfg.embeddingBatchSize).toBe(10);
+  });
+
+  it("overrides arrays via JSON env vars", async () => {
+    process.env.RAG_MCP_INCLUDE_EXTS = JSON.stringify([".ts", ".tsx"]);
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.includeExts).toEqual([".ts", ".tsx"]);
+  });
+});
