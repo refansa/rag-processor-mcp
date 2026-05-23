@@ -1,10 +1,6 @@
-/**
- * Index orchestrator: resolve repo → scan → chunk → embed → store.
- */
-
 import type { Chunk, StoreEntry } from "../core/types.js";
 import { getEmbedder } from "../core/embedder.js";
-import { countEntries, recordRepo, replaceRepoEntries } from "../core/store.js";
+import type { Store } from "../core/store/index.js";
 import { resolveRepo } from "./resolver.js";
 import { scanFiles } from "./scanner.js";
 import { chunkFile } from "./chunker.js";
@@ -22,6 +18,7 @@ export interface IndexProgress {
 
 export async function indexRepo(
   repoRef: string,
+  store: Store,
   opts?: {
     signal?: AbortSignal;
     onProgress?: (p: IndexProgress) => void;
@@ -108,19 +105,20 @@ export async function indexRepo(
     throw new Error("Indexing cancelled");
   }
 
-  // Atomic swap: remove old entries for this repo, add new ones in one write
+  // Atomic swap: remove old entries for this repo, add new ones
   progress("store", 0, storeEntries.length, `Storing ${storeEntries.length} entries...`);
   console.error(`[indexer] Storing ${storeEntries.length} entries...`);
-  replaceRepoEntries(repoName, storeEntries);
+  await store.entry.overwriteRepoEntries(repoName, storeEntries);
 
-  recordRepo({
+  await store.repo.save({
     chunkCount: storeEntries.length,
     indexedAt: new Date().toISOString(),
     repoName,
     repoUrl: repoRef,
   });
 
-  console.error(`[indexer] Done. Total vector store: ${countEntries()} entries`);
+  const total = await store.entry.totalEntries();
+  console.error(`[indexer] Done. Total vector store: ${total} entries`);
 
   progress("store", storeEntries.length, storeEntries.length, "Done");
 

@@ -18,6 +18,7 @@
     "import/group-exports": "off",
     "import/no-namespace": "off",
     "import/no-nodejs-modules": "off",
+    "import/exports-last": "off",
     "unicorn/no-null": "off",
     "unicorn/numeric-separators-style": "off",
     "unicorn/text-encoding-identifier-case": "off",
@@ -33,6 +34,10 @@
     "eslint/init-declarations": "off",
     "eslint/no-underscore-dangle": "off",
     "typescript/no-inferrable-types": "off",
-    "eslint/prefer-destructuring": "off"
+    "eslint/prefer-destructuring": "off",
+    "eslint/max-params": "off",
+    "eslint/no-await-in-loop": "off",
+    "eslint/no-continue": "off",
+    "eslint/no-duplicate-imports": "off"
   }
 }

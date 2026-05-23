@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -8,7 +8,6 @@ let tmpDir: string;
 beforeEach(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rag-store-"));
   process.env.RAG_MCP_DATA_DIR = tmpDir;
-  vi.resetModules();
 });
 
 afterEach(() => {
@@ -31,98 +30,116 @@ function makeEntry(id: string, repoName: string, text = "some code") {
   };
 }
 
-describe("store", () => {
+describe("Store (JSON provider)", () => {
   it("starts empty", async () => {
-    const { countEntries } = await import("../store.js");
-    expect(countEntries()).toBe(0);
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
+    const count = await store.entry.totalEntries();
+    expect(count).toBe(0);
+    await store.$disconnect();
   });
 
   it("adds and counts entries", async () => {
-    const { addEntries, countEntries } = await import("../store.js");
-    addEntries([makeEntry("1", "repo-a")]);
-    addEntries([makeEntry("2", "repo-a")]);
-    expect(countEntries()).toBe(2);
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
+    await store.entry.insertOne(makeEntry("1", "repo-a"));
+    await store.entry.insertOne(makeEntry("2", "repo-a"));
+    expect(await store.entry.totalEntries()).toBe(2);
+    await store.$disconnect();
   });
 
   it("searches by cosine similarity", async () => {
-    const { addEntries, search } = await import("../store.js");
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
 
-    // Add entries with distinct embeddings
-    addEntries([
+    await store.entry.insertBatch([
       { ...makeEntry("1", "repo-a", "hello world"), embedding: Array(384).fill(0.5) },
       { ...makeEntry("2", "repo-a", "goodbye world"), embedding: Array(384).fill(-0.5) },
     ]);
 
-    // Query embedding close to entry 1
     const queryEmbedding = Array(384).fill(0.5);
-    const results = search(queryEmbedding, 2);
+    const results = await store.entry.searchSimilar(queryEmbedding, { take: 2 });
 
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe("1");
     expect(results[0].score).toBeGreaterThan(results[1].score);
+    await store.$disconnect();
   });
 
   it("returns search results with snippet", async () => {
-    const { addEntries, search } = await import("../store.js");
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
+
     const longText = "A".repeat(1000);
-    addEntries([makeEntry("big", "repo-a", longText)]);
+    await store.entry.insertOne(makeEntry("big", "repo-a", longText));
 
     const queryEmbedding = Array(384).fill(0.1);
-    const results = search(queryEmbedding, 1);
+    const results = await store.entry.searchSimilar(queryEmbedding, { take: 1 });
 
     expect(results).toHaveLength(1);
-    // Snippet should be truncated to default length
     expect(results[0].content.length).toBeLessThanOrEqual(500);
+    await store.$disconnect();
   });
 
   it("atomically replaces entries for a repo", async () => {
-    const { addEntries, replaceRepoEntries, countEntries, search } = await import("../store.js");
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
 
-    addEntries([makeEntry("old1", "repo-a", "old code")]);
-    addEntries([makeEntry("other", "repo-b", "other code")]);
-    expect(countEntries()).toBe(2);
+    await store.entry.insertOne(makeEntry("old1", "repo-a", "old code"));
+    await store.entry.insertOne(makeEntry("other", "repo-b", "other code"));
+    expect(await store.entry.totalEntries()).toBe(2);
 
-    // Replace repo-a entries — should keep repo-b intact
-    replaceRepoEntries("repo-a", [
+    await store.entry.overwriteRepoEntries("repo-a", [
       makeEntry("new1", "repo-a", "new code"),
       makeEntry("new2", "repo-a", "more new"),
     ]);
-    expect(countEntries()).toBe(3);
+    expect(await store.entry.totalEntries()).toBe(3);
 
-    // Verify repo-b is still there
     const queryEmbedding = Array(384).fill(0.1);
-    const results = search(queryEmbedding, 10);
-    const repoBResults = results.filter((r) => r.repo === "repo-b");
+    const results = await store.entry.searchSimilar(queryEmbedding, { take: 10 });
+    const repoBResults = results.filter((r: { repo: string }) => r.repo === "repo-b");
     expect(repoBResults).toHaveLength(1);
     expect(repoBResults[0].id).toContain("other");
+    await store.$disconnect();
   });
 
   it("lists indexed repos", async () => {
-    const { recordRepo, getIndexedRepos } = await import("../store.js");
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
 
-    recordRepo({
+    await store.repo.save({
       chunkCount: 5,
       indexedAt: new Date().toISOString(),
       repoName: "repo-a",
       repoUrl: "https://github.com/user/repo.git",
     });
 
-    const repos = getIndexedRepos();
+    const repos = await store.repo.listAll();
     expect(repos).toHaveLength(1);
     expect(repos[0].repoName).toBe("repo-a");
+    await store.$disconnect();
   });
 
   it("removes a repo and its entries", async () => {
-    const { addEntries, removeRepo, countEntries, getIndexedRepos } = await import("../store.js");
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
 
-    addEntries([makeEntry("1", "repo-a")]);
-    addEntries([makeEntry("2", "repo-b")]);
-    expect(countEntries()).toBe(2);
+    await store.entry.insertOne(makeEntry("1", "repo-a"));
+    await store.entry.insertOne(makeEntry("2", "repo-b"));
+    expect(await store.entry.totalEntries()).toBe(2);
 
-    removeRepo("repo-a");
-    expect(countEntries()).toBe(1);
+    await store.repo.removeOne("repo-a");
+    expect(await store.entry.totalEntries()).toBe(1);
 
-    const repos = getIndexedRepos();
-    expect(repos.every((r) => r.repoName !== "repo-a")).toBe(true);
+    const repos = await store.repo.listAll();
+    expect(repos.every((r: { repoName: string }) => r.repoName !== "repo-a")).toBe(true);
+    await store.$disconnect();
   });
 });

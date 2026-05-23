@@ -1,12 +1,9 @@
-/**
- * Index_repo tool: clone or pull a repo and embed its code.
- */
-
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type { Store } from "../core/store/index.js";
 import { indexRepo } from "../indexing/index.js";
 import type { IndexProgress } from "../indexing/index.js";
 import { errorResponse, textResponse } from "../core/response.js";
@@ -30,65 +27,67 @@ interface IndexRepoArgs {
   repo_url: string;
 }
 
-async function handleIndexRepo(
-  { repo_url }: IndexRepoArgs,
-  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
-) {
-  if (!repo_url) {
-    return errorResponse("repo_url is required");
-  }
-
-  const progressToken = extra._meta?.progressToken;
-
-  function onProgress(p: IndexProgress) {
-    if (progressToken !== undefined) {
-      extra
-        .sendNotification({
-          method: "notifications/progress",
-          params: {
-            message: p.message,
-            progress: p.current,
-            progressToken,
-            total: p.total,
-          },
-        } as ServerNotification)
-        .catch(() => {
-          // Best-effort — client may not support progress
-        });
+function handleIndexRepo(store: Store) {
+  return async (
+    { repo_url }: IndexRepoArgs,
+    extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+  ) => {
+    if (!repo_url) {
+      return errorResponse("repo_url is required");
     }
-  }
 
-  try {
-    const result = await indexRepo(repo_url, {
-      onProgress,
-      signal: extra.signal,
-    });
+    const progressToken = extra._meta?.progressToken;
 
-    return textResponse({
-      chunks: result.chunkCount,
-      files: result.fileCount,
-      message: `Indexed ${result.fileCount} files (${result.chunkCount} chunks) from ${result.repoName}`,
-      repo: result.repoName,
-      status: "ok",
-    });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    if (msg === "Indexing cancelled") {
-      return errorResponse("Indexing was cancelled");
+    function onProgress(p: IndexProgress) {
+      if (progressToken !== undefined) {
+        extra
+          .sendNotification({
+            method: "notifications/progress",
+            params: {
+              message: p.message,
+              progress: p.current,
+              progressToken,
+              total: p.total,
+            },
+          } as ServerNotification)
+          .catch(() => {
+            // Best-effort — client may not support progress
+          });
+      }
     }
-    throw error;
-  }
+
+    try {
+      const result = await indexRepo(repo_url, store, {
+        onProgress,
+        signal: extra.signal,
+      });
+
+      return textResponse({
+        chunks: result.chunkCount,
+        files: result.fileCount,
+        message: `Indexed ${result.fileCount} files (${result.chunkCount} chunks) from ${result.repoName}`,
+        repo: result.repoName,
+        status: "ok",
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "Indexing cancelled") {
+        return errorResponse("Indexing was cancelled");
+      }
+      throw error;
+    }
+  };
 }
 
 // --- Registration ---
 
-export function registerIndexRepoTool(server: McpServer): void {
+export function registerIndexRepoTool(server: McpServer, store: Store): void {
   server.registerTool(
     "index_repo",
     {
       description: DESCRIPTION,
       inputSchema: INPUT_SCHEMA as unknown as AnySchema,
     },
-    handleIndexRepo,
+    handleIndexRepo(store),
   );
 }

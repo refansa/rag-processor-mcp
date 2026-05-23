@@ -1,14 +1,10 @@
-/**
- * Search_codebase tool: semantic query over indexed repos.
- */
-
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { getEmbedder } from "../core/embedder.js";
-import { search } from "../core/store.js";
 import { textResponse } from "../core/response.js";
 import { getConfig } from "../core/config.js";
+import type { EntryStore } from "../core/store/index.js";
 
 const cfg = getConfig();
 
@@ -45,26 +41,28 @@ interface SearchArgs {
   n_results: number;
 }
 
-async function handleSearch({ query, n_results }: SearchArgs) {
-  const embedder = await getEmbedder();
-  const output = await embedder([query], {
-    normalize: true,
-    pooling: "mean",
-  });
-  const queryEmbedding: number[] = output.tolist()[0];
-  const results = search(queryEmbedding, n_results);
-  return textResponse({ results, total: results.length });
+function handleSearch(entryStore: EntryStore) {
+  return async ({ query, n_results }: SearchArgs) => {
+    const embedder = await getEmbedder();
+    const output = await embedder([query], {
+      normalize: true,
+      pooling: "mean",
+    });
+    const queryEmbedding: number[] = output.tolist()[0];
+    const results = await entryStore.searchSimilar(queryEmbedding, { take: n_results });
+    return textResponse({ results, total: results.length });
+  };
 }
 
 // --- Registration ---
 
-export function registerSearchTool(server: McpServer): void {
+export function registerSearchTool(server: McpServer, entryStore: EntryStore): void {
   server.registerTool(
     "search_codebase",
     {
       description: DESCRIPTION,
       inputSchema: INPUT_SCHEMA as unknown as AnySchema,
     },
-    handleSearch,
+    handleSearch(entryStore),
   );
 }

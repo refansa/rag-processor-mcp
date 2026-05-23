@@ -1,13 +1,17 @@
 import { spawn } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const SERVER = path.resolve(process.cwd(), "dist/server.js");
 
-/**
- * Spawn the MCP server, wait for it to be ready, send a request,
- * then close stdin and return the parsed JSON response.
- */
+let tmpDir: string;
+
+beforeAll(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rag-int-"));
+});
+
 function mcpCall(method: string, params?: Record<string, unknown>): Promise<unknown> {
   const request = JSON.stringify({
     id: 1,
@@ -19,16 +23,18 @@ function mcpCall(method: string, params?: Record<string, unknown>): Promise<unkn
   return new Promise<unknown>((resolve, reject) => {
     const proc = spawn(process.execPath, [SERVER], {
       stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        RAG_MCP_STORE_URL: tmpDir,
+      },
     });
 
     const chunks: Buffer[] = [];
 
-    // Collect stdout data
     proc.stdout!.on("data", (data: Buffer) => {
       chunks.push(data);
     });
 
-    // When stdin closes, the server will exit — parse what we got
     proc.stdout!.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       try {
@@ -42,14 +48,11 @@ function mcpCall(method: string, params?: Record<string, unknown>): Promise<unkn
       reject(err);
     });
 
-    // Wait for the server ready message on stderr, then send the request
     proc.stderr!.once("data", () => {
-      // Server is ready — write the request and close stdin
       proc.stdin!.write(`${request}\n`);
       proc.stdin!.end();
     });
 
-    // Safety timeout
     setTimeout(() => {
       proc.kill();
       reject(new Error("mcpCall timed out after 10s"));

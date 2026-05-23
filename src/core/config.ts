@@ -13,7 +13,19 @@ import * as os from "node:os";
 
 // ── Config shape ────────────────────────────────────────────────────────
 
+export interface StoreConfig {
+  /** Backend provider: "json" (local files) or "postgresql" (server-based). */
+  provider: "json" | "postgresql";
+  /** Connection string (postgresql) or data directory (json). */
+  url: string;
+  /** Connection pool size (postgresql only). */
+  poolSize: number;
+}
+
 export interface Config {
+  /** Store backend configuration. */
+  store: StoreConfig;
+
   /** Directory for all server data (store, repos, config). */
   dataDir: string;
   /** Subdirectory under dataDir for cloned repos. */
@@ -51,6 +63,11 @@ const HOME = process.env.HOME || os.homedir();
 const DEFAULT_DATA_DIR = path.join(HOME, ".hermes", "rag-mcp-server");
 
 export const DEFAULT_CONFIG: Config = {
+  store: {
+    poolSize: 5,
+    provider: "json",
+    url: DEFAULT_DATA_DIR,
+  },
   chunkOverlap: 200,
   chunkSize: 1000,
   dataDir: DEFAULT_DATA_DIR,
@@ -145,6 +162,26 @@ function loadEnvOverrides(): Partial<Config> {
     cfg.snippetMaxChars = Number(env.RAG_MCP_SNIPPET_MAX);
   }
 
+  // Store backend overrides
+  if (env.RAG_MCP_STORE_PROVIDER) {
+    cfg.store = {
+      ...(cfg.store ?? DEFAULT_CONFIG.store),
+      provider: env.RAG_MCP_STORE_PROVIDER as "json" | "postgresql",
+    };
+  }
+  if (env.RAG_MCP_STORE_URL) {
+    cfg.store = {
+      ...(cfg.store ?? DEFAULT_CONFIG.store),
+      url: env.RAG_MCP_STORE_URL,
+    };
+  }
+  if (env.RAG_MCP_PG_POOL_SIZE) {
+    cfg.store = {
+      ...(cfg.store ?? DEFAULT_CONFIG.store),
+      poolSize: Number(env.RAG_MCP_PG_POOL_SIZE),
+    };
+  }
+
   // Array overrides via JSON (e.g. RAG_MCP_INCLUDE_EXTS='[".ts",".js"]')
   if (env.RAG_MCP_INCLUDE_EXTS) {
     try {
@@ -182,6 +219,13 @@ export function getConfig(): Config {
     ...DEFAULT_CONFIG,
     ...fromFile,
     ...fromEnv,
+  };
+
+  // Deep-merge nested store config: default ← file ← env
+  _config.store = {
+    ...DEFAULT_CONFIG.store,
+    ...fromFile.store,
+    ...fromEnv.store,
   };
 
   // Derive reposDir from dataDir if not explicitly set
