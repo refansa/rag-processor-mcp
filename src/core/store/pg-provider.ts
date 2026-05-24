@@ -23,6 +23,7 @@ interface PgRepoRow {
   repo_url: string;
   indexed_at: string;
   chunk_count: number;
+  branch: string | null;
 }
 
 function toVectorString(embedding: number[]): string {
@@ -49,8 +50,14 @@ export class PgProvider implements StoreProvider {
           repo_name   TEXT PRIMARY KEY,
           repo_url    TEXT NOT NULL,
           indexed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          chunk_count INTEGER NOT NULL DEFAULT 0
+          chunk_count INTEGER NOT NULL DEFAULT 0,
+          branch      TEXT
         )
+      `);
+
+      // Migration: add branch column for databases created before branch support
+      await client.query(`
+        ALTER TABLE indexed_repos ADD COLUMN IF NOT EXISTS branch TEXT
       `);
 
       await client.query(`
@@ -275,9 +282,10 @@ export class PgProvider implements StoreProvider {
   async listAll(): Promise<IndexedRepo[]> {
     try {
       const result = await this.pool.query<PgRepoRow>(
-        "SELECT repo_name, repo_url, indexed_at, chunk_count FROM indexed_repos ORDER BY repo_name",
+        "SELECT repo_name, repo_url, indexed_at, chunk_count, branch FROM indexed_repos ORDER BY repo_name",
       );
       return result.rows.map((row) => ({
+        branch: row.branch ?? undefined,
         chunkCount: row.chunk_count,
         indexedAt: row.indexed_at,
         repoName: row.repo_name,
@@ -290,15 +298,22 @@ export class PgProvider implements StoreProvider {
 
   async save(repo: IndexedRepo): Promise<void> {
     const sql = `
-      INSERT INTO indexed_repos (repo_name, repo_url, indexed_at, chunk_count)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO indexed_repos (repo_name, repo_url, indexed_at, chunk_count, branch)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (repo_name) DO UPDATE SET
         repo_url   = EXCLUDED.repo_url,
         indexed_at = EXCLUDED.indexed_at,
-        chunk_count = EXCLUDED.chunk_count
+        chunk_count = EXCLUDED.chunk_count,
+        branch     = EXCLUDED.branch
     `;
     try {
-      await this.pool.query(sql, [repo.repoName, repo.repoUrl, repo.indexedAt, repo.chunkCount]);
+      await this.pool.query(sql, [
+        repo.repoName,
+        repo.repoUrl,
+        repo.indexedAt,
+        repo.chunkCount,
+        repo.branch ?? null,
+      ]);
     } catch (err) {
       throw new StoreError("Failed to save repo", err);
     }

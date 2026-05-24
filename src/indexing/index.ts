@@ -23,10 +23,12 @@ export async function indexRepo(
   opts?: {
     signal?: AbortSignal;
     onProgress?: (p: IndexProgress) => void;
+    branch?: string;
   },
 ): Promise<{ repoName: string; fileCount: number; chunkCount: number }> {
   const signal = opts?.signal;
   const onProgress = opts?.onProgress;
+  const branch = opts?.branch;
 
   function progress(
     phase: IndexProgress["phase"],
@@ -39,7 +41,7 @@ export async function indexRepo(
 
   progress("clone", 0, 1, `Resolving repo: ${repoRef}`);
   console.error(`[indexer] Resolving repo: ${repoRef}`);
-  const { localPath, repoName } = await resolveRepo(repoRef, signal);
+  const { localPath, repoName } = await resolveRepo(repoRef, signal, branch);
 
   if (signal?.aborted) {
     throw new AbortError("Cancelled before scanning");
@@ -194,6 +196,7 @@ export async function indexRepo(
   console.error(`[indexer] Storing ${storeEntries.length} entries...`);
 
   await store.repo.save({
+    branch,
     chunkCount: storeEntries.length,
     indexedAt: new Date().toISOString(),
     repoName,

@@ -27,6 +27,7 @@ function extractRepoName(repoRef: string): string {
 export async function resolveRepo(
   repoRef: string,
   signal?: AbortSignal,
+  branch?: string,
 ): Promise<{ localPath: string; repoName: string }> {
   const repoName = extractRepoName(repoRef);
 
@@ -42,13 +43,21 @@ export async function resolveRepo(
   const localPath = path.join(CACHE_DIR, repoName);
 
   if (fs.existsSync(localPath)) {
-    console.error(`[indexer] Pulling latest for ${repoName}...`);
-    const git = simpleGitModule({ baseDir: localPath });
-    await git.pull();
+    if (branch) {
+      console.error(`[indexer] Syncing branch ${branch} for ${repoName}...`);
+      const git = simpleGitModule({ baseDir: localPath });
+      await git.fetch("origin", branch);
+      await git.raw(["checkout", "-B", branch, `origin/${branch}`]);
+    } else {
+      console.error(`[indexer] Pulling latest for ${repoName}...`);
+      const git = simpleGitModule({ baseDir: localPath });
+      await git.pull();
+    }
   } else {
-    console.error(`[indexer] Cloning ${repoRef}...`);
+    const cloneOpts = branch ? ["--single-branch", "--branch", branch] : ["--single-branch"];
+    console.error(`[indexer] Cloning ${repoRef} (${cloneOpts.join(" ")})...`);
     const git = simpleGitModule();
-    await git.clone(repoRef, localPath);
+    await git.clone(repoRef, localPath, cloneOpts);
   }
 
   if (signal?.aborted) {

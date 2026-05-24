@@ -20,17 +20,24 @@ const INPUT_SCHEMA = z.object({
   repo_url: z
     .string()
     .describe("Git URL (e.g. https://github.com/user/repo.git) or local filesystem path"),
+  branch: z
+    .string()
+    .optional()
+    .describe(
+      "Branch to index (e.g. 'main', 'develop'). Defaults to the repository's default branch.",
+    ),
 });
 
 // --- Handler ---
 
 interface IndexRepoArgs {
   repo_url: string;
+  branch?: string;
 }
 
 function handleIndexRepo(store: Store) {
   return async (
-    { repo_url }: IndexRepoArgs,
+    { repo_url, branch }: IndexRepoArgs,
     extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
   ) => {
     if (!repo_url) {
@@ -59,14 +66,17 @@ function handleIndexRepo(store: Store) {
 
     try {
       const result = await indexRepo(repo_url, store, {
+        branch,
         onProgress,
         signal: extra.signal,
       });
 
+      const branchSuffix = branch ? ` (branch: ${branch})` : "";
       return textResponse({
+        branch,
         chunks: result.chunkCount,
         files: result.fileCount,
-        message: `Indexed ${result.fileCount} files (${result.chunkCount} chunks) from ${result.repoName}`,
+        message: `Indexed ${result.fileCount} files (${result.chunkCount} chunks) from ${result.repoName}${branchSuffix}`,
         repo: result.repoName,
         status: "ok",
       });
