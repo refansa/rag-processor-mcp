@@ -23,7 +23,9 @@ describe("config defaults", () => {
     const { getConfig } = await import("../config.js");
     const cfg = getConfig();
 
-    expect(cfg.embedderModel).toBe("Xenova/all-MiniLM-L6-v2");
+    expect(cfg.embedder.provider).toBe("local");
+    expect(cfg.embedder.model).toBe("Xenova/all-MiniLM-L6-v2");
+    expect(cfg.embedder.concurrency).toBeGreaterThanOrEqual(1);
     expect(cfg.chunkSize).toBe(1000);
     expect(cfg.chunkOverlap).toBe(200);
     expect(cfg.embeddingBatchSize).toBe(200);
@@ -82,5 +84,59 @@ describe("config env overrides", () => {
     const cfg = getConfig();
 
     expect(cfg.includeExts).toEqual([".ts", ".tsx"]);
+  });
+
+  it("overrides embedder provider via RAG_MCP_EMBED_PROVIDER", async () => {
+    process.env.RAG_MCP_EMBED_PROVIDER = "openai";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.provider).toBe("openai");
+  });
+
+  it("overrides embedder model via RAG_MCP_MODEL", async () => {
+    process.env.RAG_MCP_MODEL = "text-embedding-3-large";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.model).toBe("text-embedding-3-large");
+  });
+
+  it("overrides embedder model via RAG_MCP_EMBED_MODEL", async () => {
+    process.env.RAG_MCP_EMBED_MODEL = "cohere/embed-english-v3";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.model).toBe("cohere/embed-english-v3");
+  });
+
+  it("overrides embedder apiKey via RAG_MCP_EMBED_API_KEY", async () => {
+    process.env.RAG_MCP_EMBED_API_KEY = "sk-test-123";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.apiKey).toBe("sk-test-123");
+  });
+
+  it("overrides embedder baseUrl via RAG_MCP_EMBED_BASE_URL", async () => {
+    process.env.RAG_MCP_EMBED_BASE_URL = "https://api.deepseek.com";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.baseUrl).toBe("https://api.deepseek.com");
+  });
+
+  it("clamps embedder concurrency to minimum 1", async () => {
+    process.env.RAG_MCP_EMBED_CONCURRENCY = "0";
+    const { getConfig, resetConfig } = await import("../config.js");
+    resetConfig();
+    const cfg = getConfig();
+
+    expect(cfg.embedder.concurrency).toBe(1);
   });
 });

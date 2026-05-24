@@ -45,11 +45,8 @@ function handleSearch(entryStore: EntryStore) {
   return async ({ query, n_results }: SearchArgs) => {
     try {
       const embedder = await getEmbedder();
-      const output = await embedder([query], {
-        normalize: true,
-        pooling: "mean",
-      });
-      const queryEmbedding: number[] = output.tolist()[0];
+      const embeddingRows = await embedder.embed([query]);
+      const queryEmbedding: number[] = embeddingRows[0];
       const results = await entryStore.searchSimilar(queryEmbedding, { take: n_results });
       return textResponse({ results, total: results.length });
     } catch (error) {

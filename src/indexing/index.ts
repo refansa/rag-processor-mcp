@@ -152,14 +152,11 @@ export async function indexRepo(
       }
 
       // Start next batch on the next pipeline instance
-      const pipeline = embedders[ei % embedders.length];
+      const provider = embedders[ei % embedders.length];
       ei++;
       pending.push({
         chunks: batch,
-        embeddings: pipeline(
-          batch.map((c) => c.text),
-          { normalize: true, pooling: "mean" },
-        ).then((o: any) => o.tolist()),
+        embeddings: provider.embed(batch.map((c) => c.text)),
       });
     }
 

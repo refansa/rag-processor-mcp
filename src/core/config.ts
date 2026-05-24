@@ -22,17 +22,30 @@ export interface StoreConfig {
   poolSize: number;
 }
 
+export interface EmbedderConfig {
+  /** Embedding provider name: "local" (ONNX), "openai", or "cohere". */
+  provider: string;
+  /** Model name (provider-specific). */
+  model: string;
+  /** API key for remote providers. */
+  apiKey: string;
+  /** Base URL for OpenAI-compatible APIs (e.g. OpenRouter, DeepSeek). Only used with provider "openai". */
+  baseUrl: string;
+  /** Number of concurrent instances. */
+  concurrency: number;
+}
+
 export interface Config {
   /** Store backend configuration. */
   store: StoreConfig;
+
+  /** Embedder backend configuration. */
+  embedder: EmbedderConfig;
 
   /** Directory for all server data (store, repos, config). */
   dataDir: string;
   /** Subdirectory under dataDir for cloned repos. */
   reposDir: string;
-
-  /** HuggingFace model ID for embeddings. */
-  embedderModel: string;
 
   /** File extensions to include when scanning repos. */
   includeExts: string[];
@@ -48,9 +61,6 @@ export interface Config {
 
   /** Number of chunks to embed per batch (memory/performance trade-off). */
   embeddingBatchSize: number;
-
-  /** Number of concurrent embedding pipelines (each uses its own ONNX session). */
-  embeddingConcurrency: number;
 
   /** Default number of search results. */
   defaultResults: number;
@@ -71,13 +81,18 @@ export const DEFAULT_CONFIG: Config = {
     provider: "json",
     url: DEFAULT_DATA_DIR,
   },
+  embedder: {
+    provider: "local",
+    model: "Xenova/all-MiniLM-L6-v2",
+    apiKey: "",
+    baseUrl: "",
+    concurrency: Math.min(2, Math.max(1, os.cpus().length - 1)),
+  },
   chunkOverlap: 200,
   chunkSize: 1000,
   dataDir: DEFAULT_DATA_DIR,
   defaultResults: 5,
-  embedderModel: "Xenova/all-MiniLM-L6-v2",
   embeddingBatchSize: 200,
-  embeddingConcurrency: Math.min(4, Math.max(1, os.cpus().length - 1)),
   excludeDirs: [
     "node_modules",
     "__pycache__",
@@ -141,9 +156,6 @@ function loadEnvOverrides(): Partial<Config> {
   if (env.RAG_MCP_REPOS_DIR) {
     cfg.reposDir = env.RAG_MCP_REPOS_DIR;
   }
-  if (env.RAG_MCP_MODEL) {
-    cfg.embedderModel = env.RAG_MCP_MODEL;
-  }
   if (env.RAG_MCP_CHUNK_SIZE) {
     cfg.chunkSize = Number(env.RAG_MCP_CHUNK_SIZE);
   }
@@ -165,8 +177,40 @@ function loadEnvOverrides(): Partial<Config> {
   if (env.RAG_MCP_SNIPPET_MAX) {
     cfg.snippetMaxChars = Number(env.RAG_MCP_SNIPPET_MAX);
   }
-  if (env.RAG_MCP_EMBED_CONCURRENCY) {
-    cfg.embeddingConcurrency = Number(env.RAG_MCP_EMBED_CONCURRENCY);
+
+  // Embedder backend overrides
+  if (
+    env.RAG_MCP_EMBED_PROVIDER ||
+    env.RAG_MCP_MODEL ||
+    env.RAG_MCP_EMBED_MODEL ||
+    env.RAG_MCP_EMBED_API_KEY ||
+    env.RAG_MCP_EMBED_BASE_URL ||
+    env.RAG_MCP_EMBED_CONCURRENCY
+  ) {
+    cfg.embedder = { ...(cfg.embedder ?? DEFAULT_CONFIG.embedder) };
+    if (env.RAG_MCP_EMBED_PROVIDER) {
+      cfg.embedder.provider = env.RAG_MCP_EMBED_PROVIDER;
+    }
+    if (env.RAG_MCP_MODEL) {
+      cfg.embedder.model = env.RAG_MCP_MODEL;
+    }
+    if (env.RAG_MCP_EMBED_MODEL) {
+      if (env.RAG_MCP_MODEL) {
+        console.error(
+          "[config] Both RAG_MCP_MODEL and RAG_MCP_EMBED_MODEL set — RAG_MCP_EMBED_MODEL wins",
+        );
+      }
+      cfg.embedder.model = env.RAG_MCP_EMBED_MODEL;
+    }
+    if (env.RAG_MCP_EMBED_API_KEY) {
+      cfg.embedder.apiKey = env.RAG_MCP_EMBED_API_KEY;
+    }
+    if (env.RAG_MCP_EMBED_BASE_URL) {
+      cfg.embedder.baseUrl = env.RAG_MCP_EMBED_BASE_URL;
+    }
+    if (env.RAG_MCP_EMBED_CONCURRENCY) {
+      cfg.embedder.concurrency = Math.max(1, Number(env.RAG_MCP_EMBED_CONCURRENCY));
+    }
   }
 
   // Store backend overrides
@@ -233,6 +277,13 @@ export function getConfig(): Config {
     ...DEFAULT_CONFIG.store,
     ...fromFile.store,
     ...fromEnv.store,
+  };
+
+  // Deep-merge nested embedder config: default ← file ← env
+  _config.embedder = {
+    ...DEFAULT_CONFIG.embedder,
+    ...fromFile.embedder,
+    ...fromEnv.embedder,
   };
 
   // Derive reposDir from dataDir if not explicitly set
