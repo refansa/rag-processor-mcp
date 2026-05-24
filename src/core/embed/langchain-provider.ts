@@ -11,4 +11,8 @@ export class LCEmbeddingProvider implements EmbeddingProvider {
   async embed(texts: string[], _signal?: AbortSignal): Promise<number[][]> {
     return this.lc.embedDocuments(texts);
   }
+
+  dispose(): void {
+    this.lc = null!;
+  }
 }

@@ -58,7 +58,10 @@ function configChanged(cfg: CachedConfig): boolean {
   );
 }
 
-export function resetEmbedders(): void {
+export async function resetEmbedders(): Promise<void> {
+  for (const inst of instances) {
+    await inst.dispose();
+  }
   instances = [];
   cachedConfig = null;
 }
@@ -72,7 +75,7 @@ export async function getEmbedders(): Promise<EmbeddingProvider[]> {
   const cfg = getConfig();
 
   if (configChanged(cfg.embedder)) {
-    instances = [];
+    await resetEmbedders();
     cachedConfig = { ...cfg.embedder };
   }
 

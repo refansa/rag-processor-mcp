@@ -5,6 +5,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Store } from "./core/store/index.js";
+import { resetEmbedders } from "./core/embedder.js";
 import { registerTools } from "./tools/index.js";
 import { getConfig } from "./core/config.js";
 
@@ -43,9 +44,13 @@ process.on("unhandledRejection", (reason) => {
   console.error("[rag-processor-mcp] Unhandled rejection:", reason);
 });
 
-process.on("SIGINT", () => {
+process.on("SIGINT", async () => {
+  await resetEmbedders();
+  await store.$disconnect();
   process.exit(0);
 });
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
+  await resetEmbedders();
+  await store.$disconnect();
   process.exit(0);
 });

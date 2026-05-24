@@ -1,11 +1,12 @@
 /**
  * Local ONNX embedder using @xenova/transformers.
  */
+import type { FeatureExtractionPipeline } from "@xenova/transformers";
 import { pipeline } from "@xenova/transformers";
 import type { EmbeddingProvider } from "./provider.js";
 
 export class LocalProvider implements EmbeddingProvider {
-  private p: any;
+  private p: FeatureExtractionPipeline | null;
 
   constructor(localPipeline: any) {
     this.p = localPipeline;
@@ -17,7 +18,14 @@ export class LocalProvider implements EmbeddingProvider {
   }
 
   async embed(texts: string[], _signal?: AbortSignal): Promise<number[][]> {
-    const output = await this.p(texts, { normalize: true, pooling: "mean" });
+    const output = await this.p!(texts, { normalize: true, pooling: "mean" });
     return output.tolist();
+  }
+
+  async dispose(): Promise<void> {
+    if (this.p && typeof this.p.dispose === "function") {
+      await this.p.dispose();
+    }
+    this.p = null;
   }
 }

@@ -28,3 +28,7 @@ Thumbs.db
 
 # AI Agents
 .opencode/plans
+
+# Temporary dir
+tmp/
+temp/
