@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import type { PoolClient } from "pg";
 import type { IndexedRepo, SearchResult, StoreEntry } from "../types.js";
 import type { SearchWhere, StoreProvider } from "./provider.js";
 import { getConfig } from "../config.js";
@@ -189,26 +190,7 @@ export class PgProvider implements StoreProvider {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-
-      const sql = `
-        INSERT INTO store_entries (id, repo_name, file_path, ext, chunk_index, total_chunks, text, embedding)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
-        ON CONFLICT (id) DO NOTHING
-      `;
-
-      for (const entry of entries) {
-        await client.query(sql, [
-          entry.id,
-          entry.metadata.repoName,
-          entry.metadata.filePath,
-          entry.metadata.ext,
-          entry.metadata.chunkIndex,
-          entry.metadata.totalChunks,
-          entry.text,
-          toVectorString(entry.embedding),
-        ]);
-      }
-
+      await this.multiRowInsert(client, entries);
       await client.query("COMMIT");
     } catch (err) {
       await client.query("ROLLBACK");
@@ -226,23 +208,7 @@ export class PgProvider implements StoreProvider {
       await client.query("DELETE FROM store_entries WHERE repo_name = $1", [repoName]);
 
       if (entries.length > 0) {
-        const sql = `
-          INSERT INTO store_entries (id, repo_name, file_path, ext, chunk_index, total_chunks, text, embedding)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
-          ON CONFLICT (id) DO NOTHING
-        `;
-        for (const entry of entries) {
-          await client.query(sql, [
-            entry.id,
-            entry.metadata.repoName,
-            entry.metadata.filePath,
-            entry.metadata.ext,
-            entry.metadata.chunkIndex,
-            entry.metadata.totalChunks,
-            entry.text,
-            toVectorString(entry.embedding),
-          ]);
-        }
+        await this.multiRowInsert(client, entries);
       }
 
       await client.query("COMMIT");
@@ -270,6 +236,37 @@ export class PgProvider implements StoreProvider {
       return Number(result.rows[0].count);
     } catch (err) {
       throw new StoreError("Failed to count entries", err);
+    }
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────
+
+  private async multiRowInsert(client: PoolClient, entries: StoreEntry[]): Promise<void> {
+    const COLS = "id, repo_name, file_path, ext, chunk_index, total_chunks, text, embedding";
+    const ROWS_PER_STATEMENT = 500;
+
+    for (let i = 0; i < entries.length; i += ROWS_PER_STATEMENT) {
+      const batch = entries.slice(i, i + ROWS_PER_STATEMENT);
+      const placeholders = batch
+        .map((_, ri) => {
+          const base = ri * 8;
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}::vector)`;
+        })
+        .join(", ");
+      const params = batch.flatMap((e) => [
+        e.id,
+        e.metadata.repoName,
+        e.metadata.filePath,
+        e.metadata.ext,
+        e.metadata.chunkIndex,
+        e.metadata.totalChunks,
+        e.text,
+        toVectorString(e.embedding),
+      ]);
+      await client.query(
+        `INSERT INTO store_entries (${COLS}) VALUES ${placeholders} ON CONFLICT (id) DO NOTHING`,
+        params,
+      );
     }
   }
 

@@ -158,17 +158,17 @@ Brute-force (O(n) per query) over all stored entries. Simple for small-to-medium
 ## Commands
 
 ```bash
-npm run build        # tsc
-npm run dev          # build + run
-npm start            # run compiled output
-npm test             # vitest run (single run)
-npm run test:watch   # vitest (watch mode)
-npm run lint         # oxlint
-npm run lint:fix     # oxlint --fix
-npm run format       # oxfmt --write src/
-npm run format:check # oxfmt --check src/
-npm run inspect      # MCP Inspector (web UI at localhost:5173)
-npm run inspect:cli  # MCP Inspector (terminal mode)
+pnpm run build        # tsc
+pnpm run dev          # build + run
+pnpm start            # run compiled output
+pnpm test             # vitest run (single run)
+pnpm run test:watch   # vitest (watch mode)
+pnpm run lint         # oxlint
+pnpm run lint:fix     # oxlint --fix
+pnpm run format       # oxfmt --write src/
+pnpm run format:check # oxfmt --check src/
+pnpm run inspect      # MCP Inspector (web UI at localhost:5173)
+pnpm run inspect:cli  # MCP Inspector (terminal mode)
 ```
 
 ## Testing
@@ -176,8 +176,8 @@ npm run inspect:cli  # MCP Inspector (terminal mode)
 Tests live next to source files as `*.test.ts`. Config in `vitest.config.ts`.
 
 ```bash
-npm test             # run all tests once
-npm run test:watch   # watch mode for TDD
+pnpm test             # run all tests once
+pnpm run test:watch   # watch mode for TDD
 ```
 
 ### Conventions
@@ -230,6 +230,6 @@ If you're an AI agent working on this codebase:
 - **Use the existing patterns.** New tool? Copy `src/tools/search.ts` structure. New store operation? Extend `src/core/store/index.ts`.
 - **No default exports.** Named exports everywhere.
 - **ESM `.js` extension** on all internal imports.
-- **Run `npm run lint:fix` and `npm run format`** before committing.
+- **Run `pnpm run lint:fix` and `pnpm run format`** before committing.
 - **Changes to `core/` ripple everywhere** — think twice before adding dependencies there.
 - **Vector store is JSON-backed, not a DB.** Don't add SQLite or other DBs without discussion — the simplicity is intentional.

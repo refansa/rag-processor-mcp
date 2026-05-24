@@ -4,6 +4,7 @@ import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/proto
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { Store } from "../core/store/index.js";
+import { AbortError } from "../core/abort-error.js";
 import { indexRepo } from "../indexing/index.js";
 import type { IndexProgress } from "../indexing/index.js";
 import { errorResponse, textResponse } from "../core/response.js";
@@ -70,8 +71,7 @@ function handleIndexRepo(store: Store) {
         status: "ok",
       });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg === "Indexing cancelled") {
+      if (error instanceof AbortError) {
         return errorResponse("Indexing was cancelled");
       }
       throw error;

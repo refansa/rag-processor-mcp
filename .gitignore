@@ -25,3 +25,6 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# AI Agents
+.plans
