@@ -20,6 +20,8 @@ export interface StoreConfig {
   url: string;
   /** Connection pool size (postgresql only). */
   poolSize: number;
+  /** Embedding vector dimension (postgresql only — must match the embedder model output). */
+  embeddingDimension: number;
 }
 
 export interface EmbedderConfig {
@@ -77,6 +79,7 @@ const DEFAULT_DATA_DIR = path.join(HOME, ".rag-mcp-server");
 
 export const DEFAULT_CONFIG: Config = {
   store: {
+    embeddingDimension: 384,
     poolSize: 5,
     provider: "json",
     url: DEFAULT_DATA_DIR,
@@ -230,6 +233,12 @@ function loadEnvOverrides(): Partial<Config> {
     cfg.store = {
       ...(cfg.store ?? DEFAULT_CONFIG.store),
       poolSize: Number(env.RAG_MCP_PG_POOL_SIZE),
+    };
+  }
+  if (env.RAG_MCP_EMBEDDING_DIMENSION) {
+    cfg.store = {
+      ...(cfg.store ?? DEFAULT_CONFIG.store),
+      embeddingDimension: Number(env.RAG_MCP_EMBEDDING_DIMENSION),
     };
   }
 

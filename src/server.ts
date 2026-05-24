@@ -12,6 +12,7 @@ import { getConfig } from "./core/config.js";
 const cfg = getConfig();
 
 const store = new Store({
+  embeddingDimension: cfg.store.embeddingDimension,
   poolSize: cfg.store.poolSize,
   provider: cfg.store.provider,
   url: cfg.store.url,

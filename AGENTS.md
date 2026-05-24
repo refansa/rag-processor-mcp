@@ -17,7 +17,7 @@ Two implementations of `StoreProvider` (12 methods in `provider.ts`):
 | JSON (default) | `json-provider.ts` | `new JsonProvider(url)` |
 | PostgreSQL | `pg-provider.ts` | `new PgProvider(url, poolSize)` |
 
-The `Store` class in `store.ts` wires them: `new Store({ provider: "json" | "postgresql", url, poolSize })`. Public API surfaces are `store.entry` (`EntryStore`) and `store.repo` (`RepoStore`).
+The `Store` class in `store.ts` wires them: `new Store({ provider: "json" | "postgresql", url, poolSize, embeddingDimension })`. Public API surfaces are `store.entry` (`EntryStore`) and `store.repo` (`RepoStore`).
 
 **PgProvider gaps (unwritten):** zero tests, `removeRepoEntries` doesn't update `chunk_count`, no pool error handler, `getFileEntries` returns `embedding: []`.
 
@@ -41,9 +41,9 @@ To add a new provider:
 
 Three-layer priority: hardcoded defaults < `~/.rag-mcp-server/config.json` < `RAG_MCP_*` env vars. Deep-merge for nested `store` and `embedder` objects. Paths normalized to forward slashes.
 
-Notable env vars: `RAG_MCP_DATA_DIR`, `RAG_MCP_STORE_PROVIDER`, `RAG_MCP_STORE_URL`, `RAG_MCP_EMBED_PROVIDER`, `RAG_MCP_MODEL` / `RAG_MCP_EMBED_MODEL` (latter wins), `RAG_MCP_EMBED_API_KEY`, `RAG_MCP_EMBED_BASE_URL`.
+Notable env vars: `RAG_MCP_DATA_DIR`, `RAG_MCP_STORE_PROVIDER`, `RAG_MCP_STORE_URL`, `RAG_MCP_EMBEDDING_DIMENSION`, `RAG_MCP_EMBED_PROVIDER`, `RAG_MCP_MODEL` / `RAG_MCP_EMBED_MODEL` (latter wins), `RAG_MCP_EMBED_API_KEY`, `RAG_MCP_EMBED_BASE_URL`.
 
-Key defaults: `chunkSize: 1000`, `chunkOverlap: 200`, `embeddingBatchSize: 200`, `maxFileBytes: 50_000`, `embedder.concurrency: max(1, cpus-1)`.
+Key defaults: `chunkSize: 1000`, `chunkOverlap: 200`, `embeddingBatchSize: 200`, `maxFileBytes: 50_000`, `embedder.concurrency: max(1, cpus-1)`, `store.embeddingDimension: 384`.
 
 ## Index pipeline (`src/indexing/index.ts`)
 

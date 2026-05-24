@@ -14,12 +14,14 @@ async function createLC(
   model: string,
   apiKey: string,
   baseUrl: string,
+  dimensions?: number,
 ): Promise<Embeddings> {
   switch (provider) {
     case "openai": {
       return new OpenAIEmbeddings({
         apiKey,
         model,
+        dimensions,
         configuration: { baseURL: baseUrl || undefined },
       });
     }
@@ -42,6 +44,7 @@ interface CachedConfig {
   apiKey: string;
   baseUrl: string;
   concurrency: number;
+  dimensions?: number;
 }
 
 let instances: EmbeddingProvider[] = [];
@@ -54,7 +57,8 @@ function configChanged(cfg: CachedConfig): boolean {
     cachedConfig.model !== cfg.model ||
     cachedConfig.apiKey !== cfg.apiKey ||
     cachedConfig.baseUrl !== cfg.baseUrl ||
-    cachedConfig.concurrency !== cfg.concurrency
+    cachedConfig.concurrency !== cfg.concurrency ||
+    cachedConfig.dimensions !== cfg.dimensions
   );
 }
 
@@ -76,7 +80,7 @@ export async function getEmbedders(): Promise<EmbeddingProvider[]> {
 
   if (configChanged(cfg.embedder)) {
     await resetEmbedders();
-    cachedConfig = { ...cfg.embedder };
+    cachedConfig = { ...cfg.embedder, dimensions: cfg.store.embeddingDimension };
   }
 
   while (instances.length < cachedConfig!.concurrency) {
@@ -88,6 +92,7 @@ export async function getEmbedders(): Promise<EmbeddingProvider[]> {
         cachedConfig!.model,
         cachedConfig!.apiKey,
         cachedConfig!.baseUrl,
+        cachedConfig!.dimensions,
       );
       instances.push(new LCEmbeddingProvider(lc));
     }

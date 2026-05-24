@@ -32,12 +32,15 @@ function toVectorString(embedding: number[]): string {
 
 export class PgProvider implements StoreProvider {
   private pool: Pool;
+  private readonly embeddingDimension: number;
 
-  constructor(url: string, poolSize?: number) {
+  constructor(url: string, poolSize?: number, embeddingDimension?: number) {
     this.pool = new Pool({
       connectionString: url,
       max: poolSize ?? 5,
     });
+
+    this.embeddingDimension = Math.min(embeddingDimension!, 2000); // Hard limit to 2000 to support HNSW.
   }
 
   async connect(): Promise<void> {
@@ -69,7 +72,7 @@ export class PgProvider implements StoreProvider {
           chunk_index  INTEGER NOT NULL,
           total_chunks INTEGER NOT NULL DEFAULT 0,
           text         TEXT NOT NULL,
-          embedding    vector(384) NOT NULL
+          embedding    vector(${this.embeddingDimension}) NOT NULL
         )
       `);
 

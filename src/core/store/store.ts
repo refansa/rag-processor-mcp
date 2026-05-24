@@ -8,6 +8,7 @@ export interface StoreOptions {
   provider: "json" | "postgresql";
   url: string;
   poolSize?: number;
+  embeddingDimension?: number;
 }
 
 export class Store {
@@ -18,7 +19,7 @@ export class Store {
   constructor(opts: StoreOptions) {
     this.provider =
       opts.provider === "postgresql"
-        ? new PgProvider(opts.url, opts.poolSize ?? 5)
+        ? new PgProvider(opts.url, opts.poolSize ?? 5, opts.embeddingDimension)
         : new JsonProvider(opts.url);
     this.entry = new EntryStore(this.provider);
     this.repo = new RepoStore(this.provider);
