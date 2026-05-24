@@ -1,3 +1,3 @@
 export interface EmbeddingProvider {
-  embed(texts: string[]): Promise<number[][]>;
+  embed(texts: string[], signal?: AbortSignal): Promise<number[][]>;
 }

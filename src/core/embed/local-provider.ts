@@ -16,7 +16,7 @@ export class LocalProvider implements EmbeddingProvider {
     return new LocalProvider(localPipeline);
   }
 
-  async embed(texts: string[]): Promise<number[][]> {
+  async embed(texts: string[], _signal?: AbortSignal): Promise<number[][]> {
     const output = await this.p(texts, { normalize: true, pooling: "mean" });
     return output.tolist();
   }

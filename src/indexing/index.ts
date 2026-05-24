@@ -37,13 +37,9 @@ export async function indexRepo(
     onProgress?.({ current, message, phase, total });
   }
 
-  if (signal?.aborted) {
-    throw new AbortError("Cancelled before cloning");
-  }
-
   progress("clone", 0, 1, `Resolving repo: ${repoRef}`);
   console.error(`[indexer] Resolving repo: ${repoRef}`);
-  const { localPath, repoName } = await resolveRepo(repoRef);
+  const { localPath, repoName } = await resolveRepo(repoRef, signal);
 
   if (signal?.aborted) {
     throw new AbortError("Cancelled before scanning");
@@ -156,12 +152,18 @@ export async function indexRepo(
       ei++;
       pending.push({
         chunks: batch,
-        embeddings: provider.embed(batch.map((c) => c.text)),
+        embeddings: provider.embed(
+          batch.map((c) => c.text),
+          signal,
+        ),
       });
     }
 
     // Drain remaining in-flight batches
     for (const p of pending) {
+      if (signal?.aborted) {
+        throw new AbortError("Cancelled while draining pending embeddings");
+      }
       const embeddings = await p.embeddings;
       for (let j = 0; j < p.chunks.length; j++) {
         storeEntries.push({
@@ -197,6 +199,10 @@ export async function indexRepo(
     repoName,
     repoUrl: repoRef,
   });
+
+  if (signal?.aborted) {
+    throw new AbortError("Cancelled before storing entries");
+  }
 
   await store.entry.overwriteRepoEntries(repoName, storeEntries);
 

@@ -8,7 +8,7 @@ export class LCEmbeddingProvider implements EmbeddingProvider {
     this.lc = lc;
   }
 
-  async embed(texts: string[]): Promise<number[][]> {
+  async embed(texts: string[], _signal?: AbortSignal): Promise<number[][]> {
     return this.lc.embedDocuments(texts);
   }
 }

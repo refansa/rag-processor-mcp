@@ -1,235 +1,85 @@
 # rag-processor-mcp
 
-MCP server for **semantic search over code repositories**. Index any Git repo — local or remote — then query it by meaning, not keywords.
+MCP server for semantic search over code repositories — index any Git repo, query by meaning.
 
-## Architecture
+## Key facts
 
-Domain-based directory structure under `src/`:
+**Dependency direction:** `tools/` → `indexing/` → `core/` — no reverse imports.
 
-```
-src/
-├── server.ts              # Entry point: McpServer + StdioServerTransport
-├── core/                  # Shared primitives — no imports from indexing/ or tools/
-│   ├── embedder.ts        #   all-MiniLM-L6-v2 singleton (Xenova Transformers)
-│   ├── store.ts           #   JSON-backed vector store with cosine similarity
-│   ├── response.ts        #   MCP response helpers (textResponse, errorResponse)
-│   └── types.ts           #   Shared TypeScript types
-├── indexing/              # Pipeline: resolve → scan → chunk → embed → store
-│   ├── index.ts           #   Orchestrator (indexRepo function)
-│   ├── resolver.ts        #   Git clone/pull or local path resolution
-│   ├── scanner.ts         #   File walker with include/exclude rules
-│   └── chunker.ts         #   Overlapping text chunker (1K chars, 200 overlap)
-└── tools/                 # MCP tool handlers — one file per tool
-    ├── index.ts           #   Barrel: registerTools()
-    ├── search.ts          #   search_codebase tool
-    ├── index-repo.ts      #   index_repo tool
-    ├── list-repos.ts      #   list_indexed_repos tool
-    ├── get-file-content.ts #   get_file_content tool
-    └── remove-repo.ts     #   remove_repo tool
-```
+**Entrypoint:** `src/server.ts` — creates `McpServer` + `StdioServerTransport`. Fatal errors → `process.exit(1)`.
 
-### Dependency direction
+## Store backends (`src/core/store/`)
 
-`tools/` → `indexing/` → `core/`
+Two implementations of `StoreProvider` (12 methods in `provider.ts`):
 
-No reverse imports. `core/` knows nothing about indexing or tools. `indexing/` imports only from `core/`.
+| Provider | File | Selection |
+|---|---|---|
+| JSON (default) | `json-provider.ts` | `new JsonProvider(url)` |
+| PostgreSQL | `pg-provider.ts` | `new PgProvider(url, poolSize)` |
 
-## Technology stack
+The `Store` class in `store.ts` wires them: `new Store({ provider: "json" | "postgresql", url, poolSize })`. Public API surfaces are `store.entry` (`EntryStore`) and `store.repo` (`RepoStore`).
 
-| Layer | Choice |
-|---|---|
-| Runtime | Node 22 (ESM) |
-| Language | TypeScript 5.5, strict mode |
-| Transport | stdio (StdioServerTransport) |
-| SDK | @modelcontextprotocol/sdk v1 |
-| Embeddings | all-MiniLM-L6-v2 via @xenova/transformers (in-process, no external API) |
-| Git | simple-git |
-| Linter | oxlint (correctness+suspicious=error, perf+style=warn) |
-| Formatter | oxfmt |
-| Bundler | tsc only (no bundler — native Node ESM) |
+**PgProvider gaps (unwritten):** zero tests, `removeRepoEntries` doesn't update `chunk_count`, no pool error handler, `getFileEntries` returns `embedding: []`.
 
-## Conventions
+## Embedder backends (`src/core/embed/`)
 
-### Naming
+Three providers via `EmbeddingProvider` interface (single method: `embed(texts: string[]): Promise<number[][]>`):
 
-- **Files**: `kebab-case.ts` — always. E.g. `index-repo.ts`, `list-repos.ts`.
-- **Exports**: Named exports only. No default exports anywhere.
-- **Tool registration functions**: `register*Tool` — e.g. `registerSearchTool`, `registerIndexRepoTool`.
-- **Types/interfaces**: PascalCase (`SearchResult`, `StoreEntry`, `FileInfo`).
-- **Variables/functions**: camelCase.
+| Provider | Class | LangChain-based |
+|---|---|---|
+| local (ONNX) | `LocalProvider` | No |
+| openai | `LCEmbeddingProvider` wrapping `OpenAIEmbeddings` | Yes |
+| cohere | `LCEmbeddingProvider` wrapping `CohereEmbeddings` | Yes |
 
-### File structure (tools)
+Wired in `src/core/embedder.ts` with concurrency pooling — `getEmbedders()` returns N instances for parallel embedding. Config-driven via `cfg.embedder.{provider, model, apiKey, baseUrl, concurrency}`.
 
-Every tool handler file follows the same structure:
+To add a new provider:
+- **LangChain-supported:** install the package, add `case` in `createLC()` → gets `LCEmbeddingProvider` for free
+- **Custom:** implement `EmbeddingProvider`, add branch in `getEmbedders()`
 
-1. Imports (stdlib, third-party, internal — grouped and ordered)
-2. `// --- Config ---` — DESCRIPTION string + INPUT_SCHEMA
-3. `// --- Handler ---` — async handler function
-4. `// --- Registration ---` — `export function register*Tool(server)`
+## Config (`src/core/config.ts`)
 
-### Import style
+Three-layer priority: hardcoded defaults < `~/.rag-mcp-server/config.json` < `RAG_MCP_*` env vars. Deep-merge for nested `store` and `embedder` objects. Paths normalized to forward slashes.
 
-- Internal imports use `.js` extension (ESM convention): `import { ... } from "../core/store/index/index.js"`
-- Zod used for input schema definitions in tool handlers
-- `@modelcontextprotocol/sdk` imports from `.../mcp.js` subpath
+Notable env vars: `RAG_MCP_DATA_DIR`, `RAG_MCP_STORE_PROVIDER`, `RAG_MCP_STORE_URL`, `RAG_MCP_EMBED_PROVIDER`, `RAG_MCP_MODEL` / `RAG_MCP_EMBED_MODEL` (latter wins), `RAG_MCP_EMBED_API_KEY`, `RAG_MCP_EMBED_BASE_URL`.
 
-### Error handling
+Key defaults: `chunkSize: 1000`, `chunkOverlap: 200`, `embeddingBatchSize: 200`, `maxFileBytes: 50_000`, `embedder.concurrency: max(1, cpus-1)`.
 
-- Fatal errors in `server.ts`: log to stderr, `process.exit(1)`
-- Tool-level errors: return `errorResponse(message)` — never throw
-- Writes use atomic write pattern (write to `.tmp.<pid>`, then `renameSync`)
+## Index pipeline (`src/indexing/index.ts`)
 
-## Key patterns
-
-### Embedder singleton
-
-```ts
-// core/embedder.ts — loaded once, shared across application
-const embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-```
-
-### Config system
-
-```ts
-// src/core/config.ts — three-layer priority: hardcoded < config file < env var
-const cfg = getConfig();
-// cfg.dataDir, cfg.reposDir, cfg.embedderModel, cfg.chunkSize, etc.
-```
-
-All hardcoded constants are in `src/core/config.ts`. Override via `~/.rag-mcp-server/config.json` or `RAG_MCP_*` env vars.
-
-### Atomic replace — no data-loss window
-
-```ts
-// core/store/index.ts — single write removes old + adds new entries
-replaceRepoEntries(repoName, newEntries);
-// NOT: removeRepo() + addEntries() — that's two writes with a loss window
-```
-
-### Index pipeline with progress
-
-```ts
-// indexing/index.ts — accepts optional signal + onProgress
-await indexRepo("https://github.com/user/repo.git", {
-  signal: extra.signal,
-  onProgress: (p) => {
-    // p.phase: "clone" | "scan" | "chunk" | "embed" | "store"
-    // p.current, p.total, p.message
-  },
-});
-```
-
-### MCP progress notifications (long-running tools)
-
-Tool handlers that run longer than a few seconds should report progress:
-
-```ts
-// tools/index-repo.ts
-async function handleIndexRepo(args, extra) {
-  const progressToken = extra._meta?.progressToken;
-  if (progressToken !== undefined) {
-    await extra.sendNotification({
-      method: "notifications/progress",
-      params: { progressToken, progress, total, message },
-    } as ServerNotification);
-  }
-}
-```
-
-Check `extra.signal.aborted` periodically and throw if cancelled.
-
-### Atomic JSON persistence
-
-```ts
-// core/store/index.ts — write to temp file, then rename
-const tmp = filePath + ".tmp." + process.pid;
-fs.writeFileSync(tmp, data, "utf-8");
-fs.renameSync(tmp, filePath);
-```
-
-### Batch embedding
-
-Embeddings are generated in batches of 50 to avoid OOM on large repos. Progress logged every 200 chunks.
-
-### Cosine similarity
-
-Brute-force (O(n) per query) over all stored entries. Simple for small-to-medium datasets. Not designed for million-scale corpora.
+Producer-consumer pattern: chunk files (producer) → embed batches (consumer) — run concurrently via `Promise.all`. Batching via shared buffer with backpressure (`MAX_IN_FLIGHT = embedders.length`). Accepts `AbortSignal` + `onProgress` callback. Phases: `clone` → `scan` → `chunk` → `embed` → `store`.
 
 ## Commands
 
-```bash
-pnpm run build        # tsc
-pnpm run dev          # build + run
-pnpm start            # run compiled output
-pnpm test             # vitest run (single run)
-pnpm run test:watch   # vitest (watch mode)
-pnpm run lint         # oxlint
-pnpm run lint:fix     # oxlint --fix
-pnpm run format       # oxfmt --write src/
-pnpm run format:check # oxfmt --check src/
-pnpm run inspect      # MCP Inspector (web UI at localhost:5173)
-pnpm run inspect:cli  # MCP Inspector (terminal mode)
-```
+| Command | Action |
+|---|---|
+| `pnpm run build` | `tsc` |
+| `pnpm dev` | `tsc && node dist/server.js` |
+| `pnpm start` | `node dist/server.js` |
+| `pnpm test` | `vitest run` |
+| `pnpm run test:watch` | `vitest` (watch) |
+| `pnpm run lint` | `oxlint` |
+| `pnpm run lint:fix` | `oxlint --fix` |
+| `pnpm run format` | `oxfmt --write src/` |
+| `pnpm run format:check` | `oxfmt --check src/` |
+| `pnpm run inspect` | MCP Inspector (web, localhost:5173) |
+| `pnpm run inspect:cli` | MCP Inspector (terminal) |
+| `pnpm exec lint-staged` | Pre-commit: `oxlint --fix` + `oxfmt --write` on staged `*.{ts,tsx,js,jsx}` |
+
+## Conventions
+
+- **Naming:** `kebab-case.ts` files, named exports only (no default), camelCase variables, PascalCase types/interfaces
+- **Tool handler structure:** `// --- Config ---` (DESCRIPTION + INPUT_SCHEMA via Zod), `// --- Handler ---`, `// --- Registration ---` (`export function register*Tool(server, store)`)
+- **Internal imports:** ESM `.js` extension (`import { ... } from "../core/store/index.js"`)
+- **SDK imports:** from `@modelcontextprotocol/sdk/server/mcp.js`
+- **Error handling:** tool handlers return `errorResponse(message)` — never throw; fatal → `console.error` + `process.exit(1)`
+- **Atomic JSON writes:** `.tmp.<pid>` file then `renameSync` (no data-loss window)
+- **Changes to `core/`** ripple everywhere
 
 ## Testing
 
-Tests live next to source files as `*.test.ts`. Config in `vitest.config.ts`.
-
-```bash
-pnpm test             # run all tests once
-pnpm run test:watch   # watch mode for TDD
-```
-
-### Conventions
-
-- **Core logic** gets unit tests (config, store, chunker, scanner, response).
-- **Integration tests** live in `src/__tests__/server.test.ts` — start the server over stdio and verify tool registration/responses.
-- **Store tests** use temp directories via `RAG_MCP_DATA_DIR` env var + `resetConfig()` to avoid polluting the real data dir.
-- **Config tests** reset env vars between tests with `vi.resetModules()` + dynamic `import()`.
-- No globals — import `describe`, `it`, `expect`, `vi` explicitly from vitest.
-
-## Data flow
-
-```
-index_repo("https://github.com/user/repo.git")
-  → resolver.ts: clone or pull to ~/.rag-mcp-server/repos/
-  → scanner.ts: walk files (skip excluded dirs >50KB, non-code exts)
-  → chunker.ts: split into overlapping 1K-char chunks
-  → embedder.ts: all-MiniLM-L6-v2 batch embedding
-  → store.ts: atomic JSON write to ~/.rag-mcp-server/entries.json
-
-search_codebase("logging pattern", n_results=5)
-  → embedder.ts: embed query
-  → store.ts: cosine similarity scan over all entries
-  → return top-n results
-```
-
-## Data location
-
-All persistent data under `~/.rag-mcp-server/`:
-- `entries.json` — vector store (id, text, embedding, metadata)
-- `repos.json` — indexed repo registry
-- `repos/` — cloned remote repositories
-
-## MCP tools
-
-| Tool | Input | Output |
-|---|---|---|
-| `index_repo` | `repo_url: string` | `{ status, repo, files, chunks }` |
-| `search_codebase` | `query: string`, `n_results?: number` | `{ results, total }` |
-| `list_indexed_repos` | — | `{ repos, total }` |
-| `get_file_content` | `repo_name: string`, `file_path: string` | `{ repo, file, ext, content, totalChunks }` |
-| `remove_repo` | `repo_name: string` | `{ status, repo }` |
-
-## AGENTS.md conventions for this repo
-
-If you're an AI agent working on this codebase:
-
-- **Stay in the domain pattern.** New features go in the right directory: tools in `tools/`, pipeline logic in `indexing/`, shared primitives in `core/`.
-- **One concern per file.** If a tool handler gets complex, extract the business logic into `indexing/` or `core/`, not into the tool file.
-- **Use the existing patterns.** New tool? Copy `src/tools/search.ts` structure. New store operation? Extend `src/core/store/index.ts`.
-- **No default exports.** Named exports everywhere.
-- **ESM `.js` extension** on all internal imports.
-- **Run `pnpm run lint:fix` and `pnpm run format`** before committing.
-- **Changes to `core/` ripple everywhere** — think twice before adding dependencies there.
-- **Vector store is JSON-backed, not a DB.** Don't add SQLite or other DBs without discussion — the simplicity is intentional.
+- `vitest` with `globals: false` — import `describe`, `it`, `expect`, `vi` explicitly
+- Tests live next to source as `*.test.ts` (6 files), integration test in `src/__tests__/server.test.ts`
+- **Store tests:** use `RAG_MCP_DATA_DIR` pointing to `fs.mkdtempSync` dir + `resetConfig()` — never touch real `~/.rag-mcp-server/`
+- **Config tests:** `vi.resetModules()` + dynamic `import()` to clear cached config between cases
+- **PgProvider has zero tests** — JSON provider only
