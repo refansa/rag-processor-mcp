@@ -49,6 +49,9 @@ export interface Config {
   /** Number of chunks to embed per batch (memory/performance trade-off). */
   embeddingBatchSize: number;
 
+  /** Number of concurrent embedding pipelines (each uses its own ONNX session). */
+  embeddingConcurrency: number;
+
   /** Default number of search results. */
   defaultResults: number;
   /** Maximum allowed search results. */
@@ -73,7 +76,8 @@ export const DEFAULT_CONFIG: Config = {
   dataDir: DEFAULT_DATA_DIR,
   defaultResults: 5,
   embedderModel: "Xenova/all-MiniLM-L6-v2",
-  embeddingBatchSize: 50,
+  embeddingBatchSize: 200,
+  embeddingConcurrency: Math.min(4, Math.max(1, os.cpus().length - 1)),
   excludeDirs: [
     "node_modules",
     "__pycache__",
@@ -160,6 +164,9 @@ function loadEnvOverrides(): Partial<Config> {
   }
   if (env.RAG_MCP_SNIPPET_MAX) {
     cfg.snippetMaxChars = Number(env.RAG_MCP_SNIPPET_MAX);
+  }
+  if (env.RAG_MCP_EMBED_CONCURRENCY) {
+    cfg.embeddingConcurrency = Number(env.RAG_MCP_EMBED_CONCURRENCY);
   }
 
   // Store backend overrides

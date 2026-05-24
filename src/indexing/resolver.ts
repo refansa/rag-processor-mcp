@@ -18,6 +18,7 @@ function extractRepoName(repoRef: string): string {
     repoRef
       .replace(/\.git$/, "")
       .split("/")
+      .filter(Boolean)
       .pop() || "unknown";
   return name;
 }

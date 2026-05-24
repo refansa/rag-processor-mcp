@@ -74,7 +74,7 @@ function handleIndexRepo(store: Store) {
       if (error instanceof AbortError) {
         return errorResponse("Indexing was cancelled");
       }
-      throw error;
+      return errorResponse(error instanceof Error ? error.message : String(error));
     }
   };
 }

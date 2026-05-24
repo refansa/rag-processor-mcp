@@ -27,4 +27,4 @@ Thumbs.db
 .env.*.local
 
 # AI Agents
-.plans
+.opencode/plans

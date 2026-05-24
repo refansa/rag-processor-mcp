@@ -26,7 +26,7 @@ describe("config defaults", () => {
     expect(cfg.embedderModel).toBe("Xenova/all-MiniLM-L6-v2");
     expect(cfg.chunkSize).toBe(1000);
     expect(cfg.chunkOverlap).toBe(200);
-    expect(cfg.embeddingBatchSize).toBe(50);
+    expect(cfg.embeddingBatchSize).toBe(200);
     expect(cfg.maxFileBytes).toBe(50_000);
     expect(cfg.defaultResults).toBe(5);
     expect(cfg.maxResults).toBe(20);

@@ -1,15 +1,24 @@
 /**
- * Shared embedder singleton — loaded once, shared across the application.
+ * Shared embedder — singleton pipeline(s) for feature extraction.
+ * Supports multiple concurrent ONNX sessions for parallel embedding.
  */
 import { pipeline } from "@xenova/transformers";
 import { getConfig } from "./config.js";
 
-let embedder: any = null;
+const embedders: any[] = [];
 
 export async function getEmbedder(): Promise<any> {
-  const cfg = getConfig();
-  if (!embedder) {
-    embedder = await pipeline("feature-extraction", cfg.embedderModel);
+  if (embedders.length === 0) {
+    const cfg = getConfig();
+    embedders.push(await pipeline("feature-extraction", cfg.embedderModel));
   }
-  return embedder;
+  return embedders[0];
+}
+
+export async function getEmbedders(): Promise<any[]> {
+  const cfg = getConfig();
+  while (embedders.length < cfg.embeddingConcurrency) {
+    embedders.push(await pipeline("feature-extraction", cfg.embedderModel));
+  }
+  return embedders;
 }

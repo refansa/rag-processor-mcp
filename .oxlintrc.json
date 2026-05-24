@@ -23,6 +23,7 @@
     "unicorn/numeric-separators-style": "off",
     "unicorn/text-encoding-identifier-case": "off",
     "unicorn/catch-error-name": "off",
+    "unicorn/require-post-message-target-origin": "off",
     "eslint/sort-keys": "off",
     "eslint/sort-imports": "off",
     "eslint/func-style": "off",

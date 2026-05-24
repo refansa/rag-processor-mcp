@@ -34,3 +34,18 @@ main().catch((error) => {
   console.error("[rag-processor-mcp] Fatal error:", error);
   process.exit(1);
 });
+
+// Prevent native module crashes in worker threads from taking down the process.
+process.on("uncaughtException", (error) => {
+  console.error("[rag-processor-mcp] Uncaught exception:", error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[rag-processor-mcp] Unhandled rejection:", reason);
+});
+
+process.on("SIGINT", () => {
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  process.exit(0);
+});

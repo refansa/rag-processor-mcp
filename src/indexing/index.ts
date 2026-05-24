@@ -1,5 +1,5 @@
 import type { Chunk, StoreEntry } from "../core/types.js";
-import { getEmbedder } from "../core/embedder.js";
+import { getEmbedders } from "../core/embedder.js";
 import type { Store } from "../core/store/index.js";
 import { AbortError } from "../core/abort-error.js";
 import { resolveRepo } from "./resolver.js";
@@ -65,7 +65,7 @@ export async function indexRepo(
   progress("chunk", 0, files.length, `Chunking ${files.length} files...`);
   console.error(`[indexer] Chunking...`);
 
-  const embedder = await getEmbedder();
+  const embedders = await getEmbedders();
   const storeEntries: StoreEntry[] = [];
 
   // ── Producer-consumer pipeline ──────────────────────────────────────
@@ -117,31 +117,64 @@ export async function indexRepo(
 
   const consumer = (async () => {
     let embeddedCount = 0;
+    const MAX_IN_FLIGHT = embedders.length;
+    const pending: { chunks: Chunk[]; embeddings: Promise<number[][]> }[] = [];
+    let ei = 0;
+
     while (true) {
       if (signal?.aborted) {
         throw new AbortError("Cancelled during embedding");
       }
+
       const batch = await waitForChunks();
       if (batch === null) {
         break;
       }
 
-      const output = await embedder(
-        batch.map((c) => c.text),
-        { normalize: true, pooling: "mean" },
-      );
-      const embeddings: number[][] = output.tolist();
+      // Wait if at capacity to keep max in-flight batches
+      if (pending.length >= MAX_IN_FLIGHT) {
+        const done = await pending.shift()!;
+        const embeddings = await done.embeddings;
+        for (let j = 0; j < done.chunks.length; j++) {
+          storeEntries.push({
+            embedding: embeddings[j],
+            id: done.chunks[j].id,
+            metadata: done.chunks[j].metadata,
+            text: done.chunks[j].text,
+          });
+        }
+        embeddedCount += done.chunks.length;
+        progress("embed", embeddedCount, totalChunkCount, `Embedding: ${embeddedCount} chunks`);
 
-      for (let j = 0; j < batch.length; j++) {
-        storeEntries.push({
-          embedding: embeddings[j],
-          id: batch[j].id,
-          metadata: batch[j].metadata,
-          text: batch[j].text,
-        });
+        if (embeddedCount % 200 === 0) {
+          console.error(`[indexer] ... ${embeddedCount} chunks embedded`);
+        }
       }
 
-      embeddedCount += batch.length;
+      // Start next batch on the next pipeline instance
+      const pipeline = embedders[ei % embedders.length];
+      ei++;
+      pending.push({
+        chunks: batch,
+        embeddings: pipeline(
+          batch.map((c) => c.text),
+          { normalize: true, pooling: "mean" },
+        ).then((o: any) => o.tolist()),
+      });
+    }
+
+    // Drain remaining in-flight batches
+    for (const p of pending) {
+      const embeddings = await p.embeddings;
+      for (let j = 0; j < p.chunks.length; j++) {
+        storeEntries.push({
+          embedding: embeddings[j],
+          id: p.chunks[j].id,
+          metadata: p.chunks[j].metadata,
+          text: p.chunks[j].text,
+        });
+      }
+      embeddedCount += p.chunks.length;
       progress("embed", embeddedCount, totalChunkCount, `Embedding: ${embeddedCount} chunks`);
 
       if (embeddedCount % 200 === 0) {
