@@ -16,6 +16,7 @@
     "format:check": "oxfmt --check src/",
     "inspect": "mcp-inspector -- node dist/index.js",
     "inspect:cli": "mcp-inspector --cli -- node dist/index.js",
+    "inspect:standalone": "mcp-inspector",
     "prepare": "husky"
   },
   "lint-staged": {
