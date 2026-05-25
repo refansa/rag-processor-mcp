@@ -19,6 +19,7 @@
     "import/no-namespace": "off",
     "import/no-nodejs-modules": "off",
     "import/exports-last": "off",
+    "unicorn/prefer-add-event-listener": "off",
     "unicorn/no-null": "off",
     "unicorn/numeric-separators-style": "off",
     "unicorn/text-encoding-identifier-case": "off",

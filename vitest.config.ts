@@ -5,5 +5,8 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["src/**/*.test.ts"],
+    env: {
+      RAG_MCP_CONFIG: "/tmp/rag-test-no-config.json",
+    },
   },
 });

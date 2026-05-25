@@ -11,6 +11,9 @@ beforeEach(() => {
       delete process.env[key];
     }
   }
+  // Prevent tests from loading the real ~/.rag-mcp-server/config.json
+  process.env.RAG_MCP_DATA_DIR = "/tmp/rag-test-empty-config";
+  process.env.RAG_MCP_CONFIG = "/tmp/rag-test-no-config.json";
 });
 
 // Restore env after all tests

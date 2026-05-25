@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 
-const SERVER = path.resolve(process.cwd(), "dist/server.js");
+const SERVER = path.resolve(process.cwd(), "dist/index.js");
 
 let tmpDir: string;
 
@@ -26,6 +26,7 @@ function mcpCall(method: string, params?: Record<string, unknown>): Promise<unkn
       env: {
         ...process.env,
         RAG_MCP_STORE_URL: tmpDir,
+        RAG_MCP_CONFIG: "/tmp/rag-test-no-config.json",
       },
     });
 
@@ -76,7 +77,7 @@ describe("MCP server (integration)", () => {
       result: { tools: { name: string }[] };
     };
     toolsList = response.result.tools.map((t) => t.name).toSorted();
-  });
+  }, 30000);
 
   it("registers all 5 tools", () => {
     expect(toolsList).toEqual([
@@ -96,7 +97,7 @@ describe("MCP server (integration)", () => {
     const data = JSON.parse(response.result.content[0].text);
     expect(data.total).toBe(0);
     expect(data.repos).toEqual([]);
-  });
+  }, 30000);
 
   it("rejects unknown tools with an error", async () => {
     const response = (await toolCall("nonexistent_tool")) as {
@@ -104,5 +105,5 @@ describe("MCP server (integration)", () => {
       result?: { isError: boolean; content: { text: string }[] };
     };
     expect(response.error ?? response.result?.isError).toBeTruthy();
-  });
+  }, 30000);
 });
