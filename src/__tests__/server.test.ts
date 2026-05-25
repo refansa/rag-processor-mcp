@@ -48,9 +48,13 @@ function mcpCall(method: string, params?: Record<string, unknown>): Promise<unkn
       reject(err);
     });
 
-    proc.stderr!.once("data", () => {
-      proc.stdin!.write(`${request}\n`);
-      proc.stdin!.end();
+    let started = false;
+    proc.stderr!.on("data", (data: Buffer) => {
+      if (!started && data.toString().includes("Server running on stdio")) {
+        started = true;
+        proc.stdin!.write(`${request}\n`);
+        proc.stdin!.end();
+      }
     });
 
     setTimeout(() => {

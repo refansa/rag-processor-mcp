@@ -41,6 +41,11 @@ export interface Config {
   /** Store backend configuration. */
   store: StoreConfig;
 
+  /** Transport mode for the MCP server: "stdio" or "http". */
+  transport: "stdio" | "http";
+  /** Port for the HTTP transport. */
+  port: number;
+
   /** Embedder backend configuration. */
   embedder: EmbedderConfig;
 
@@ -84,6 +89,8 @@ export const DEFAULT_CONFIG: Config = {
     provider: "json",
     url: DEFAULT_DATA_DIR,
   },
+  transport: "stdio",
+  port: 3000,
   embedder: {
     provider: "local",
     model: "Xenova/all-MiniLM-L6-v2",
@@ -158,6 +165,12 @@ function loadEnvOverrides(): Partial<Config> {
   }
   if (env.RAG_MCP_REPOS_DIR) {
     cfg.reposDir = env.RAG_MCP_REPOS_DIR;
+  }
+  if (env.RAG_MCP_TRANSPORT) {
+    cfg.transport = env.RAG_MCP_TRANSPORT as "stdio" | "http";
+  }
+  if (env.RAG_MCP_PORT) {
+    cfg.port = Number(env.RAG_MCP_PORT);
   }
   if (env.RAG_MCP_CHUNK_SIZE) {
     cfg.chunkSize = Number(env.RAG_MCP_CHUNK_SIZE);
