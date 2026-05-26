@@ -28,7 +28,7 @@ export async function resolveRepo(
   repoRef: string,
   signal?: AbortSignal,
   branch?: string,
-): Promise<{ localPath: string; repoName: string }> {
+): Promise<{ localPath: string; repoName: string; newCommitHash?: string }> {
   const repoName = extractRepoName(repoRef);
 
   if (fs.existsSync(repoRef) && fs.statSync(repoRef).isDirectory()) {
@@ -64,5 +64,13 @@ export async function resolveRepo(
     throw new AbortError("Cancelled after cloning");
   }
 
-  return { localPath, repoName };
+  let newCommitHash: string | undefined;
+  try {
+    const git = simpleGitModule({ baseDir: localPath });
+    newCommitHash = await git.revparse(["HEAD"]);
+  } catch {
+    // Not a git repo or no commits yet
+  }
+
+  return { localPath, repoName, newCommitHash };
 }

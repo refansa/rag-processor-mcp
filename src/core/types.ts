@@ -41,4 +41,5 @@ export interface IndexedRepo {
   indexedAt: string;
   chunkCount: number;
   branch?: string;
+  commitHash?: string;
 }

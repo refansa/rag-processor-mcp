@@ -21,9 +21,10 @@ interface PgEntryRow {
 interface PgRepoRow {
   repo_name: string;
   repo_url: string;
-  indexed_at: string;
+  indexed_at: Date;
   chunk_count: number;
   branch: string | null;
+  commit_hash: string | null;
 }
 
 function toVectorString(embedding: number[]): string {
@@ -65,13 +66,19 @@ export class PgProvider implements StoreProvider {
           repo_url    TEXT NOT NULL,
           indexed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           chunk_count INTEGER NOT NULL DEFAULT 0,
-          branch      TEXT
+          branch      TEXT,
+          commit_hash TEXT
         )
       `);
 
       // Migration: add branch column for databases created before branch support
       await client.query(`
         ALTER TABLE indexed_repos ADD COLUMN IF NOT EXISTS branch TEXT
+      `);
+
+      // Migration: add commit_hash column
+      await client.query(`
+        ALTER TABLE indexed_repos ADD COLUMN IF NOT EXISTS commit_hash TEXT
       `);
 
       await client.query(`
@@ -281,14 +288,56 @@ export class PgProvider implements StoreProvider {
     }
   }
 
+  async removeFileEntries(repoName: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) {
+      return;
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const res = await client.query(
+        "DELETE FROM store_entries WHERE repo_name = $1 AND file_path = ANY($2) RETURNING id",
+        [repoName, filePaths],
+      );
+
+      const deletedCount = res.rowCount ?? 0;
+      if (deletedCount > 0) {
+        await client.query(
+          "UPDATE indexed_repos SET chunk_count = GREATEST(0, chunk_count - $1) WHERE repo_name = $2",
+          [deletedCount, repoName],
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw new StoreError("Failed to remove file entries", err);
+    } finally {
+      client.release();
+    }
+  }
+
   async totalEntries(): Promise<number> {
     try {
       const result = await this.pool.query<{ count: string }>(
-        "SELECT COUNT(*) AS count FROM store_entries",
+        "SELECT COUNT(*) as count FROM store_entries",
       );
-      return Number(result.rows[0].count);
+      return parseInt(result.rows[0].count, 10);
     } catch (err) {
       throw new StoreError("Failed to count entries", err);
+    }
+  }
+
+  async countRepoEntries(repoName: string): Promise<number> {
+    try {
+      const result = await this.pool.query<{ count: string }>(
+        "SELECT COUNT(*) as count FROM store_entries WHERE repo_name = $1",
+        [repoName],
+      );
+      return parseInt(result.rows[0].count, 10);
+    } catch (err) {
+      throw new StoreError("Failed to count repo entries", err);
     }
   }
 
@@ -328,7 +377,7 @@ export class PgProvider implements StoreProvider {
   async listAll(): Promise<IndexedRepo[]> {
     try {
       const result = await this.pool.query<PgRepoRow>(
-        "SELECT repo_name, repo_url, indexed_at, chunk_count, branch FROM indexed_repos ORDER BY repo_name",
+        "SELECT repo_name, repo_url, indexed_at, chunk_count, branch, commit_hash FROM indexed_repos ORDER BY repo_name",
       );
       return result.rows.map((row) => ({
         branch: row.branch ?? undefined,
@@ -336,6 +385,7 @@ export class PgProvider implements StoreProvider {
         indexedAt: row.indexed_at,
         repoName: row.repo_name,
         repoUrl: row.repo_url,
+        commitHash: row.commit_hash ?? undefined,
       }));
     } catch (err) {
       throw new StoreError("Failed to list repos", err);
@@ -344,13 +394,14 @@ export class PgProvider implements StoreProvider {
 
   async save(repo: IndexedRepo): Promise<void> {
     const sql = `
-      INSERT INTO indexed_repos (repo_name, repo_url, indexed_at, chunk_count, branch)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO indexed_repos (repo_name, repo_url, indexed_at, chunk_count, branch, commit_hash)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (repo_name) DO UPDATE SET
         repo_url   = EXCLUDED.repo_url,
         indexed_at = EXCLUDED.indexed_at,
         chunk_count = EXCLUDED.chunk_count,
-        branch     = EXCLUDED.branch
+        branch     = EXCLUDED.branch,
+        commit_hash = EXCLUDED.commit_hash
     `;
     try {
       await this.pool.query(sql, [
@@ -359,6 +410,7 @@ export class PgProvider implements StoreProvider {
         repo.indexedAt,
         repo.chunkCount,
         repo.branch ?? null,
+        repo.commitHash ?? null,
       ]);
     } catch (err) {
       throw new StoreError("Failed to save repo", err);

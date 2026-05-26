@@ -5,6 +5,7 @@ import { resetEmbedders } from "./core/embedder.js";
 async function main() {
   const args = process.argv.slice(2);
 
+  // oxlint-disable-next-line unicorn/prefer-ternary
   if (args.length > 0) {
     await runCli(args);
   } else {

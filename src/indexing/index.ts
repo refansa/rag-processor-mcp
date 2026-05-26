@@ -6,6 +6,7 @@ import { resolveRepo } from "./resolver.js";
 import { scanFiles } from "./scanner.js";
 import { chunkFile, countChunks } from "./chunker.js";
 import { getConfig } from "../core/config.js";
+import simpleGitModule from "simple-git";
 
 const cfg = getConfig();
 const BATCH_SIZE = cfg.embeddingBatchSize;
@@ -41,15 +42,81 @@ export async function indexRepo(
 
   progress("clone", 0, 1, `Resolving repo: ${repoRef}`);
   console.error(`[indexer] Resolving repo: ${repoRef}`);
-  const { localPath, repoName } = await resolveRepo(repoRef, signal, branch);
+  const { localPath, repoName, newCommitHash } = await resolveRepo(repoRef, signal, branch);
+
+  const repos = await store.repo.listAll();
+  const existingRepo = repos.find((r) => r.repoName === repoName);
+  const previousCommitHash = existingRepo?.commitHash;
+
+  if (previousCommitHash && newCommitHash && previousCommitHash === newCommitHash) {
+    console.error(`[indexer] Repo ${repoName} is already up to date at commit ${newCommitHash}`);
+    progress("store", 1, 1, "Done (up to date)");
+
+    const chunkCount = await store.entry.countRepoEntries(repoName);
+    const repoFiles = await store.entry.getRepoFiles(repoName);
+    return {
+      chunkCount,
+      fileCount: repoFiles.length,
+      repoName,
+    };
+  }
+
+  let isIncremental = false;
+  const deletedPaths: string[] = [];
+  const addedOrModifiedPaths: string[] = [];
+
+  if (previousCommitHash && newCommitHash) {
+    console.error(`[indexer] Computing diff from ${previousCommitHash} to ${newCommitHash}...`);
+    try {
+      const git = simpleGitModule({ baseDir: localPath });
+      const rawDiff = await git.raw(["diff", "--name-status", previousCommitHash, newCommitHash]);
+      const lines = rawDiff.split("\n").filter(Boolean);
+      for (const line of lines) {
+        const parts = line.split(/\t+/);
+        if (parts.length < 2) {
+          continue;
+        }
+        const status = parts[0];
+        if (status.startsWith("D")) {
+          deletedPaths.push(parts[1]);
+        } else if (status.startsWith("A") || status.startsWith("M")) {
+          addedOrModifiedPaths.push(parts[1]);
+        } else if (status.startsWith("R")) {
+          deletedPaths.push(parts[1]);
+          addedOrModifiedPaths.push(parts[2]);
+        }
+      }
+      isIncremental = true;
+      console.error(
+        `[indexer] Incremental diff: ${deletedPaths.length} deleted, ${addedOrModifiedPaths.length} added/modified`,
+      );
+    } catch (err) {
+      console.error(`[indexer] Failed to compute diff, falling back to full index`, err);
+      isIncremental = false;
+    }
+  }
 
   if (signal?.aborted) {
     throw new AbortError("Cancelled before scanning");
   }
   progress("scan", 0, 1, `Scanning files in ${localPath}...`);
   console.error(`[indexer] Scanning files in ${localPath}...`);
-  const files = scanFiles(localPath);
-  console.error(`[indexer] Found ${files.length} files`);
+  let files = scanFiles(localPath);
+
+  if (isIncremental) {
+    const targetSet = new Set(addedOrModifiedPaths);
+    // Relative path matching for scanFiles result. scanFiles returns { path, ... }
+    // which is relative to localPath.
+    files = files.filter((f) => targetSet.has(f.path.replace(/\\/g, "/")));
+
+    if (deletedPaths.length > 0 || addedOrModifiedPaths.length > 0) {
+      const toRemove = [...deletedPaths, ...addedOrModifiedPaths];
+      console.error(`[indexer] Removing ${toRemove.length} files from store before chunking...`);
+      await store.entry.removeFileEntries(repoName, toRemove);
+    }
+  }
+
+  console.error(`[indexer] Found ${files.length} files to chunk`);
   // Compute exact total chunk count for accurate progress reporting
   let totalChunkCount = 0;
   for (const file of files) {
@@ -199,17 +266,22 @@ export async function indexRepo(
 
     await store.repo.save({
       branch,
-      chunkCount: storeEntries.length,
+      // Update with total count in the store after incremental operations
+      chunkCount: (await store.entry.countRepoEntries(repoName)) + storeEntries.length,
       indexedAt: new Date().toISOString(),
       repoName,
       repoUrl: repoRef,
+      commitHash: newCommitHash,
     });
 
     if (signal?.aborted) {
       throw new AbortError("Cancelled before storing entries");
     }
 
-    await store.entry.overwriteRepoEntries(repoName, storeEntries);
+    // oxlint-disable-next-line no-unused-expressions
+    isIncremental
+      ? await store.entry.insertBatch(storeEntries)
+      : await store.entry.overwriteRepoEntries(repoName, storeEntries);
 
     const total = await store.entry.totalEntries();
     console.error(`[indexer] Done. Total vector store: ${total} entries`);

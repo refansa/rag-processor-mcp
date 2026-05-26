@@ -22,6 +22,8 @@ export interface StoreProvider {
   insertBatch(entries: StoreEntry[]): Promise<void>;
   overwriteRepoEntries(repoName: string, entries: StoreEntry[]): Promise<void>;
   removeRepoEntries(repoName: string): Promise<void>;
+  removeFileEntries(repoName: string, filePaths: string[]): Promise<void>;
+  countRepoEntries(repoName: string): Promise<number>;
   totalEntries(): Promise<number>;
 
   listAll(): Promise<IndexedRepo[]>;

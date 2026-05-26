@@ -66,6 +66,10 @@ export class EntryStore {
     return this.provider.removeRepoEntries(repoName);
   }
 
+  removeFileEntries(repoName: string, filePaths: string[]): Promise<void> {
+    return this.provider.removeFileEntries(repoName, filePaths);
+  }
+
   async getRepoFiles(repoName: string): Promise<string[]> {
     return this.provider.getRepoFiles(repoName);
   }
@@ -101,6 +105,10 @@ export class EntryStore {
 
   totalEntries(): Promise<number> {
     return this.provider.totalEntries();
+  }
+
+  countRepoEntries(repoName: string): Promise<number> {
+    return this.provider.countRepoEntries(repoName);
   }
 }
 

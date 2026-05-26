@@ -115,8 +115,23 @@ export class JsonProvider implements StoreProvider {
     this.saveEntries();
   }
 
+  async removeFileEntries(repoName: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) {
+      return;
+    }
+    const pathsSet = new Set(filePaths);
+    this.entries = this.entries.filter(
+      (e) => !(e.metadata.repoName === repoName && pathsSet.has(e.metadata.filePath)),
+    );
+    this.saveEntries();
+  }
+
   async totalEntries(): Promise<number> {
     return this.entries.length;
+  }
+
+  async countRepoEntries(repoName: string): Promise<number> {
+    return this.entries.filter((e) => e.metadata.repoName === repoName).length;
   }
 
   // ── Repo operations ──────────────────────────────────────────────────
