@@ -22,40 +22,64 @@ export async function runServer() {
     url: cfg.store.url,
   });
 
-  const server = new McpServer(
-    { name: "rag-processor-mcp", version: "0.1.0" },
-    { capabilities: { tools: {} } },
-  );
-
-  registerTools(server, store);
-
   await store.$connect();
 
   if (cfg.transport === "http") {
     const app = express();
     app.use(cors());
-    // Use express.json() if you want express to parse JSON,
-    // but handleRequest can also parse it if you pass req directly.
 
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-    });
+    const sessions = new Map<
+      string,
+      { server: McpServer; transport: StreamableHTTPServerTransport }
+    >();
 
-    await server.connect(transport);
+    app.use("/mcp", async (req, res) => {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      let transport: StreamableHTTPServerTransport;
 
-    app.use("/mcp", (req, res) => {
-      transport.handleRequest(req, res).catch((err) => {
+      if (sessionId && sessions.has(sessionId)) {
+        transport = sessions.get(sessionId)!.transport;
+      } else {
+        const server = new McpServer(
+          { name: "rag-processor-mcp", version: "0.1.0" },
+          { capabilities: { tools: {} } },
+        );
+        registerTools(server, store);
+
+        const newTransport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            sessions.set(newSessionId, { server, transport: newTransport });
+          },
+          onsessionclosed: (closedSessionId) => {
+            sessions.delete(closedSessionId);
+          },
+        });
+
+        await server.connect(newTransport);
+        transport = newTransport;
+      }
+
+      try {
+        await transport.handleRequest(req, res);
+      } catch (err) {
         console.error("[rag-processor-mcp] Transport error:", err);
         if (!res.headersSent) {
           res.status(500).send("Internal Error");
         }
-      });
+      }
     });
 
     app.listen(cfg.port, () => {
       console.error(`[rag-processor-mcp] Server running on http://localhost:${cfg.port}/mcp`);
     });
   } else {
+    const server = new McpServer(
+      { name: "rag-processor-mcp", version: "0.1.0" },
+      { capabilities: { tools: {} } },
+    );
+    registerTools(server, store);
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("[rag-processor-mcp] Server running on stdio");
