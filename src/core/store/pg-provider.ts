@@ -117,7 +117,7 @@ export class PgProvider implements StoreProvider {
 
   async getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]> {
     const sql = `
-      SELECT id, repo_name, file_path, ext, chunk_index, total_chunks, text
+      SELECT id, repo_name, file_path, ext, chunk_index, total_chunks, text, embedding
       FROM store_entries
       WHERE repo_name = $1 AND file_path = $2
       ORDER BY chunk_index ASC
@@ -127,7 +127,7 @@ export class PgProvider implements StoreProvider {
       return result.rows.map((row) => ({
         id: row.id,
         text: row.text,
-        embedding: [],
+        embedding: row.embedding ? JSON.parse(row.embedding) : [],
         metadata: {
           chunkIndex: row.chunk_index,
           ext: row.ext,
@@ -250,10 +250,19 @@ export class PgProvider implements StoreProvider {
   }
 
   async removeRepoEntries(repoName: string): Promise<void> {
+    const client = await this.pool.connect();
     try {
-      await this.pool.query("DELETE FROM store_entries WHERE repo_name = $1", [repoName]);
+      await client.query("BEGIN");
+      await client.query("DELETE FROM store_entries WHERE repo_name = $1", [repoName]);
+      await client.query("UPDATE indexed_repos SET chunk_count = 0 WHERE repo_name = $1", [
+        repoName,
+      ]);
+      await client.query("COMMIT");
     } catch (err) {
+      await client.query("ROLLBACK");
       throw new StoreError("Failed to remove repo entries", err);
+    } finally {
+      client.release();
     }
   }
 
