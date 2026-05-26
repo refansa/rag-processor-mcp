@@ -382,7 +382,7 @@ export class PgProvider implements StoreProvider {
       return result.rows.map((row) => ({
         branch: row.branch ?? undefined,
         chunkCount: row.chunk_count,
-        indexedAt: row.indexed_at,
+        indexedAt: row.indexed_at.toISOString(),
         repoName: row.repo_name,
         repoUrl: row.repo_url,
         commitHash: row.commit_hash ?? undefined,

@@ -20,6 +20,7 @@ export async function initTreeSitter() {
 
     const tsModule = await import("tree-sitter-typescript");
     const jsModule = await import("tree-sitter-javascript");
+    // @ts-ignore: no types for tree-sitter-vue
     const vueModule = await import("tree-sitter-vue");
 
     grammars.set(".ts", tsModule.default?.typescript || tsModule.typescript || tsModule);
