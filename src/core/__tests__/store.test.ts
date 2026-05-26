@@ -61,7 +61,7 @@ describe("Store (JSON provider)", () => {
     ]);
 
     const queryEmbedding = Array(384).fill(0.5);
-    const results = await store.entry.searchSimilar(queryEmbedding, { take: 2 });
+    const results = await store.entry.searchSimilar("test query", queryEmbedding, 2);
 
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe("1");
@@ -78,7 +78,7 @@ describe("Store (JSON provider)", () => {
     await store.entry.insertOne(makeEntry("big", "repo-a", longText));
 
     const queryEmbedding = Array(384).fill(0.1);
-    const results = await store.entry.searchSimilar(queryEmbedding, { take: 1 });
+    const results = await store.entry.searchSimilar("test query", queryEmbedding, 1);
 
     expect(results).toHaveLength(1);
     expect(results[0].content.length).toBeLessThanOrEqual(500);
@@ -101,7 +101,7 @@ describe("Store (JSON provider)", () => {
     expect(await store.entry.totalEntries()).toBe(3);
 
     const queryEmbedding = Array(384).fill(0.1);
-    const results = await store.entry.searchSimilar(queryEmbedding, { take: 10 });
+    const results = await store.entry.searchSimilar("test query", queryEmbedding, 10);
     const repoBResults = results.filter((r: { repo: string }) => r.repo === "repo-b");
     expect(repoBResults).toHaveLength(1);
     expect(repoBResults[0].id).toContain("other");

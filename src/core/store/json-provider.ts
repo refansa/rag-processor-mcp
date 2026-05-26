@@ -1,7 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import MiniSearch from "minisearch";
 import type { IndexedRepo, SearchResult, StoreEntry } from "../types.js";
 import type { SearchWhere, StoreProvider } from "./provider.js";
+import { fuseResults } from "../rrf.js";
 import { getConfig } from "../config.js";
 
 const cfg = getConfig();
@@ -25,6 +27,16 @@ export class JsonProvider implements StoreProvider {
   private reposFile: string;
   private entries: StoreEntry[] = [];
   private repos: IndexedRepo[] = [];
+  private miniSearch = new MiniSearch<StoreEntry>({
+    fields: ["text"], // fields to index for full-text search
+    idField: "id",
+    extractField: (document, fieldName) => {
+      if (fieldName === "text") {
+        return document.text;
+      }
+      return (document as any)[fieldName];
+    },
+  });
 
   constructor(url?: string) {
     this.dataDir = url ?? cfg.dataDir;
@@ -36,6 +48,9 @@ export class JsonProvider implements StoreProvider {
     this.ensureDir();
     this.entries = this.loadEntries();
     this.repos = this.loadRepos();
+    if (this.entries.length > 0) {
+      this.miniSearch.addAll(this.entries);
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -61,12 +76,15 @@ export class JsonProvider implements StoreProvider {
   }
 
   async searchSimilar(
+    queryText: string,
     queryEmbedding: number[],
     take: number,
     _where?: SearchWhere,
   ): Promise<SearchResult[]> {
     const ext = _where?.ext?.toLowerCase();
-    const candidates = this.entries.filter((e) => {
+
+    // Filter function reused for both vector and keyword search candidates
+    const filterFn = (e: StoreEntry) => {
       if (_where?.repo && e.metadata.repoName !== _where.repo) {
         return false;
       }
@@ -74,43 +92,69 @@ export class JsonProvider implements StoreProvider {
         return false;
       }
       return true;
-    });
+    };
 
-    const scored = candidates
+    const candidates = this.entries.filter(filterFn);
+
+    const vectorScored = candidates
       .map((entry) => ({
-        entry,
+        content: entry.text.slice(0, cfg.snippetMaxChars),
+        file: entry.metadata.filePath,
+        id: entry.id,
+        repo: entry.metadata.repoName,
         score: cosineSimilarity(queryEmbedding, entry.embedding),
       }))
       .toSorted((a, b) => b.score - a.score)
       .slice(0, take);
 
-    return scored.map((s) => ({
-      content: s.entry.text.slice(0, cfg.snippetMaxChars),
-      file: s.entry.metadata.filePath,
-      id: s.entry.id,
-      repo: s.entry.metadata.repoName,
-      score: s.score,
-    }));
+    // MiniSearch allows us to run text queries
+    // We apply the same repo/ext filters using its filter option
+    const keywordResults = this.miniSearch.search(queryText, {
+      filter: (result) => {
+        const entry = this.entries.find((e) => e.id === result.id);
+        return entry ? filterFn(entry) : false;
+      },
+    });
+
+    const keywordScored = keywordResults.slice(0, take).map((result) => {
+      const entry = this.entries.find((e) => e.id === result.id)!;
+      return {
+        content: entry.text.slice(0, cfg.snippetMaxChars),
+        file: entry.metadata.filePath,
+        id: entry.id,
+        repo: entry.metadata.repoName,
+        score: result.score,
+      };
+    });
+
+    return fuseResults(vectorScored, keywordScored).slice(0, take);
   }
 
   async insertOne(entry: StoreEntry): Promise<void> {
     this.entries.push(entry);
+    this.miniSearch.add(entry);
     this.saveEntries();
   }
 
   async insertBatch(entries: StoreEntry[]): Promise<void> {
     this.entries.push(...entries);
+    this.miniSearch.addAll(entries);
     this.saveEntries();
   }
 
   async overwriteRepoEntries(repoName: string, entries: StoreEntry[]): Promise<void> {
+    const toRemove = this.entries.filter((e) => e.metadata.repoName === repoName);
+    this.miniSearch.removeAll(toRemove);
     const kept = this.entries.filter((e) => e.metadata.repoName !== repoName);
     kept.push(...entries);
     this.entries = kept;
+    this.miniSearch.addAll(entries);
     this.saveEntries();
   }
 
   async removeRepoEntries(repoName: string): Promise<void> {
+    const toRemove = this.entries.filter((e) => e.metadata.repoName === repoName);
+    this.miniSearch.removeAll(toRemove);
     this.entries = this.entries.filter((e) => e.metadata.repoName !== repoName);
     this.saveEntries();
   }
@@ -120,6 +164,10 @@ export class JsonProvider implements StoreProvider {
       return;
     }
     const pathsSet = new Set(filePaths);
+    const toRemove = this.entries.filter(
+      (e) => e.metadata.repoName === repoName && pathsSet.has(e.metadata.filePath),
+    );
+    this.miniSearch.removeAll(toRemove);
     this.entries = this.entries.filter(
       (e) => !(e.metadata.repoName === repoName && pathsSet.has(e.metadata.filePath)),
     );
@@ -149,6 +197,8 @@ export class JsonProvider implements StoreProvider {
 
   async removeOne(repoName: string): Promise<void> {
     this.repos = this.repos.filter((r) => r.repoName !== repoName);
+    const toRemove = this.entries.filter((e) => e.metadata.repoName === repoName);
+    this.miniSearch.removeAll(toRemove);
     this.entries = this.entries.filter((e) => e.metadata.repoName !== repoName);
     this.saveRepos();
     this.saveEntries();

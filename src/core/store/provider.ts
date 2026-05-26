@@ -10,6 +10,7 @@ export interface StoreProvider {
   disconnect(): Promise<void>;
 
   searchSimilar(
+    queryText: string,
     queryEmbedding: number[],
     take: number,
     where?: SearchWhere,

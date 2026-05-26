@@ -33,6 +33,7 @@
     "@xenova/transformers": "^2.17.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "minisearch": "^7.2.0",
     "pg": "^8.21.0",
     "simple-git": "^3.27.0",
     "tree-sitter": "^0.25.0",

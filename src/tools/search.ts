@@ -52,7 +52,7 @@ function handleSearch(entryStore: EntryStore) {
       const embedder = await getEmbedder();
       const embeddingRows = await embedder.embed([query], extra.signal);
       const queryEmbedding: number[] = embeddingRows[0];
-      const results = await entryStore.searchSimilar(queryEmbedding, { take: n_results });
+      const results = await entryStore.searchSimilar(query, queryEmbedding, n_results);
       return textResponse({ results, total: results.length });
     } catch (error) {
       return errorResponse(error instanceof Error ? error.message : String(error));

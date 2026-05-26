@@ -44,10 +44,12 @@ export class EntryStore {
   }
 
   searchSimilar(
+    queryText: string,
     queryEmbedding: number[],
-    opts?: { take?: number; where?: SearchWhere },
+    take = 10,
+    where?: SearchWhere,
   ): Promise<SearchResult[]> {
-    return this.provider.searchSimilar(queryEmbedding, opts?.take ?? 5, opts?.where);
+    return this.provider.searchSimilar(queryText, queryEmbedding, take, where);
   }
 
   insertOne(entry: StoreEntry): Promise<void> {

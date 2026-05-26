@@ -1,9 +1,11 @@
 import { Pool } from "pg";
 import type { PoolClient } from "pg";
 import type { IndexedRepo, SearchResult, StoreEntry } from "../types.js";
+import { fuseResults } from "../rrf.js";
 import type { SearchWhere, StoreProvider } from "./provider.js";
 import { getConfig } from "../config.js";
 import { StoreError } from "./errors.js";
+import { runMigrations } from "./pg-migrations.js";
 
 const cfg = getConfig();
 
@@ -51,66 +53,7 @@ export class PgProvider implements StoreProvider {
   async connect(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      try {
-        await client.query("CREATE EXTENSION IF NOT EXISTS vector");
-      } catch (err) {
-        throw new StoreError(
-          "PostgreSQL vector extension is required. Install it with: CREATE EXTENSION vector;",
-          err,
-        );
-      }
-
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS indexed_repos (
-          repo_name   TEXT PRIMARY KEY,
-          repo_url    TEXT NOT NULL,
-          indexed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          chunk_count INTEGER NOT NULL DEFAULT 0,
-          branch      TEXT,
-          commit_hash TEXT
-        )
-      `);
-
-      // Migration: add branch column for databases created before branch support
-      await client.query(`
-        ALTER TABLE indexed_repos ADD COLUMN IF NOT EXISTS branch TEXT
-      `);
-
-      // Migration: add commit_hash column
-      await client.query(`
-        ALTER TABLE indexed_repos ADD COLUMN IF NOT EXISTS commit_hash TEXT
-      `);
-
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS store_entries (
-          id           TEXT PRIMARY KEY,
-          repo_name    TEXT NOT NULL REFERENCES indexed_repos(repo_name),
-          file_path    TEXT NOT NULL,
-          ext          TEXT NOT NULL,
-          chunk_index  INTEGER NOT NULL,
-          total_chunks INTEGER NOT NULL DEFAULT 0,
-          text         TEXT NOT NULL,
-          embedding    vector(${this.embeddingDimension}) NOT NULL
-        )
-      `);
-
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_entries_repo
-        ON store_entries (repo_name)
-      `);
-
-      try {
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS idx_entries_hnsw
-          ON store_entries USING hnsw (embedding vector_cosine_ops)
-        `);
-      } catch (err) {
-        console.error(
-          "[pg-provider] Failed to create HNSW index (pgvector >= 0.5.0 required); " +
-            "falling back to exact search. Error:",
-          err,
-        );
-      }
+      await runMigrations(client, this.embeddingDimension);
     } finally {
       client.release();
     }
@@ -164,51 +107,78 @@ export class PgProvider implements StoreProvider {
   }
 
   async searchSimilar(
+    queryText: string,
     queryEmbedding: number[],
     take: number,
     where?: SearchWhere,
   ): Promise<SearchResult[]> {
     const vec = toVectorString(queryEmbedding);
 
-    // Build WHERE clause dynamically
     const conditions: string[] = [];
-    const params: unknown[] = [vec, take];
+    const vectorParams: unknown[] = [vec, take];
+    const textParams: unknown[] = [queryText, take];
     let paramIdx = 3;
 
     if (where?.repo) {
-      conditions.push(`repo_name = $${paramIdx++}`);
-      params.push(where.repo);
+      conditions.push(`repo_name = $${paramIdx}`);
+      vectorParams.push(where.repo);
+      textParams.push(where.repo);
+      paramIdx++;
     }
     if (where?.ext) {
-      conditions.push(`ext = $${paramIdx++}`);
-      params.push(where.ext);
+      conditions.push(`ext = $${paramIdx}`);
+      vectorParams.push(where.ext);
+      textParams.push(where.ext);
+      paramIdx++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const textWhereClause =
+      conditions.length > 0
+        ? `WHERE text_search @@ websearch_to_tsquery('english', $1) AND ${conditions.join(" AND ")}`
+        : `WHERE text_search @@ websearch_to_tsquery('english', $1)`;
 
-    const sql = `
+    const vectorSql = `
       SELECT id, repo_name, file_path, ext, text,
              1 - (embedding <=> $1::vector) AS score
       FROM store_entries
       ${whereClause}
+      ORDER BY (embedding <=> $1::vector) ASC
+      LIMIT $2
+    `;
+
+    const textSql = `
+      SELECT id, repo_name, file_path, ext, text,
+             ts_rank(text_search, websearch_to_tsquery('english', $1)) AS score
+      FROM store_entries
+      ${textWhereClause}
       ORDER BY score DESC
       LIMIT $2
     `;
 
-    let result;
     try {
-      result = await this.pool.query<PgEntryRow>(sql, params);
+      const [vectorResult, textResult] = await Promise.all([
+        this.pool.query<PgEntryRow>(vectorSql, vectorParams),
+        this.pool.query<PgEntryRow>(textSql, textParams),
+      ]);
+
+      const mapRowToResult = (row: PgEntryRow) => ({
+        content: row.text.slice(0, cfg.snippetMaxChars),
+        file: row.file_path,
+        id: row.id,
+        repo: row.repo_name,
+        score: Number(row.score),
+      });
+
+      const fused = fuseResults(
+        vectorResult.rows.map(mapRowToResult),
+        textResult.rows.map(mapRowToResult),
+      );
+
+      return fused.slice(0, take);
     } catch (err) {
       throw new StoreError("Failed to search entries", err);
     }
-
-    return result.rows.map((row) => ({
-      content: row.text.slice(0, cfg.snippetMaxChars),
-      file: row.file_path,
-      id: row.id,
-      repo: row.repo_name,
-      score: Number(row.score),
-    }));
   }
 
   async insertOne(entry: StoreEntry): Promise<void> {
