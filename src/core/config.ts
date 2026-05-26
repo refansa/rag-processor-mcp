@@ -136,6 +136,7 @@ export const DEFAULT_CONFIG: Config = {
     ".css",
     ".scss",
     ".html",
+    ".vue",
   ],
   maxFileBytes: 50_000,
   maxResults: 20,
