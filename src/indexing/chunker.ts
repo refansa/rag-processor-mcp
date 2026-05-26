@@ -10,6 +10,9 @@ export const CHUNK_SIZE = cfg.chunkSize;
 export const CHUNK_OVERLAP = cfg.chunkOverlap;
 
 export function countChunks(file: FileInfo): number {
+  if (file.content.length === 0) {
+    return 0;
+  }
   if (file.content.length <= CHUNK_SIZE) {
     return 1;
   }
@@ -19,6 +22,10 @@ export function countChunks(file: FileInfo): number {
 export function chunkFile(file: FileInfo, repoName: string): Chunk[] {
   const { content, path: filePath, ext } = file;
   const chunks: Chunk[] = [];
+
+  if (content.length === 0) {
+    return chunks;
+  }
 
   if (content.length <= CHUNK_SIZE) {
     chunks.push({

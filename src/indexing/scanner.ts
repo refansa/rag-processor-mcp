@@ -41,6 +41,9 @@ export function scanFiles(repoPath: string): FileInfo[] {
         }
         try {
           const content = fs.readFileSync(fullPath, "utf8");
+          if (content.length === 0) {
+            continue;
+          }
           const relPath = path.relative(repoPath, fullPath).split(path.sep).join("/");
           files.push({ content, ext, path: relPath });
         } catch {

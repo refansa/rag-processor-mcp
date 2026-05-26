@@ -6,7 +6,7 @@ MCP server for semantic search over code repositories — index any Git repo, qu
 
 **Dependency direction:** `tools/` → `indexing/` → `core/` — no reverse imports.
 
-**Entrypoint:** `src/server.ts` — creates `McpServer` + `StdioServerTransport`. Fatal errors → `process.exit(1)`.
+**Entrypoint:** `src/index.ts` — routes to either CLI (`src/cli.ts`) or MCP Server (`src/server.ts`). The server supports `StdioServerTransport` and HTTP mode (`express`). Fatal errors → `process.exit(1)`.
 
 ## Store backends (`src/core/store/`)
 

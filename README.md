@@ -9,6 +9,26 @@ npm install
 npm run build
 ```
 
+### Starting the Server
+
+By default, the server runs in Stdio mode for MCP:
+
+```bash
+npm start
+```
+
+### CLI Commands
+
+You can also run standalone CLI commands without starting the MCP server:
+
+```bash
+# Index a repository manually
+node dist/index.js index-repo <repo_url> [branch]
+
+# Remove an indexed repository
+node dist/index.js remove-repo <repo_name>
+```
+
 ## Tools
 
 | Tool | Description |
@@ -26,8 +46,21 @@ query: "logging utility pattern"
 
 ## How it works
 
-1. **`index_repo`** clones (or pulls) a repo, scans code files, splits them into overlapping chunks, embeds each chunk using `all-MiniLM-L6-v2` (via Xenova Transformers, runs locally in-process), and stores the vectors as JSON.
-2. **`search_codebase`** embeds your query with the same model and finds the nearest chunks by cosine similarity.
+1. **`index_repo`** clones (or pulls) a repo, scans code files, splits them into overlapping chunks, embeds each chunk, and stores the vectors.
+2. **`search_codebase`** embeds your query and finds the nearest chunks by cosine similarity.
+
+### Backends & Configuration
+
+The server supports multiple backends for embeddings and storage via environment variables:
+
+**Embedding Providers:**
+- **Local (Default):** `all-MiniLM-L6-v2` via Xenova Transformers (runs locally in-process)
+- **OpenAI:** Uses `text-embedding-3-small` (or configured model)
+- **Cohere:** Uses `embed-english-v3.0` (or configured model)
+
+**Vector Storage:**
+- **JSON (Default):** Stores vectors in local JSON files
+- **PostgreSQL:** Uses `pgvector` for scalable storage (requires `RAG_MCP_STORE_PROVIDER=postgresql`)
 
 ### Indexed file types
 
