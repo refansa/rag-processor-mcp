@@ -40,13 +40,24 @@ export class PgProvider implements StoreProvider {
       max: poolSize ?? 5,
     });
 
-    this.embeddingDimension = Math.min(embeddingDimension!, 2000); // Hard limit to 2000 to support HNSW.
+    this.pool.on("error", (err) => {
+      console.error("[pg-provider] Pool error:", err);
+    });
+
+    this.embeddingDimension = Math.min(embeddingDimension ?? 384, 2000);
   }
 
   async connect(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await client.query("CREATE EXTENSION IF NOT EXISTS vector");
+      try {
+        await client.query("CREATE EXTENSION IF NOT EXISTS vector");
+      } catch (err) {
+        throw new StoreError(
+          "PostgreSQL vector extension is required. Install it with: CREATE EXTENSION vector;",
+          err,
+        );
+      }
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS indexed_repos (
@@ -81,10 +92,18 @@ export class PgProvider implements StoreProvider {
         ON store_entries (repo_name)
       `);
 
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_entries_hnsw
-        ON store_entries USING hnsw (embedding vector_cosine_ops)
-      `);
+      try {
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_entries_hnsw
+          ON store_entries USING hnsw (embedding vector_cosine_ops)
+        `);
+      } catch (err) {
+        console.error(
+          "[pg-provider] Failed to create HNSW index (pgvector >= 0.5.0 required); " +
+            "falling back to exact search. Error:",
+          err,
+        );
+      }
     } finally {
       client.release();
     }
