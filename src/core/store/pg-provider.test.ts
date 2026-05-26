@@ -105,6 +105,19 @@ describe("Store (PgProvider)", () => {
     expect(entries[0].embedding).toEqual([]);
   });
 
+  it("getRepoFiles returns distinct file paths", async () => {
+    const mockRows = [{ file_path: "src/index.ts" }, { file_path: "src/utils.ts" }];
+    poolMock.query.mockResolvedValueOnce({ rows: mockRows });
+
+    const files = await provider.getRepoFiles("test-repo");
+
+    expect(poolMock.query).toHaveBeenCalledWith(
+      expect.stringContaining("SELECT DISTINCT file_path"),
+      ["test-repo"],
+    );
+    expect(files).toEqual(["src/index.ts", "src/utils.ts"]);
+  });
+
   it("removeRepoEntries deletes entries and updates chunk_count", async () => {
     await provider.removeRepoEntries("test-repo");
 

@@ -142,4 +142,18 @@ describe("Store (JSON provider)", () => {
     expect(repos.every((r: { repoName: string }) => r.repoName !== "repo-a")).toBe(true);
     await store.$disconnect();
   });
+  it("getRepoFiles returns unique sorted paths", async () => {
+    const { Store } = await import("../store/index.js");
+    const store = new Store({ provider: "json", url: tmpDir });
+    await store.$connect();
+
+    await store.entry.insertOne(makeEntry("1", "repo-c", "code 1"));
+    const entry2 = makeEntry("2", "repo-c", "code 2");
+    entry2.metadata.filePath = "src/other.ts";
+    await store.entry.insertOne(entry2);
+
+    const files = await store.entry.getRepoFiles("repo-c");
+    expect(files).toEqual(["src/1.ts", "src/other.ts"]);
+    await store.$disconnect();
+  });
 });

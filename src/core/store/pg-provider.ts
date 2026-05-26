@@ -115,6 +115,21 @@ export class PgProvider implements StoreProvider {
 
   // ── Entry operations ────────────────────────────────────────────────
 
+  async getRepoFiles(repoName: string): Promise<string[]> {
+    const sql = `
+      SELECT DISTINCT file_path
+      FROM store_entries
+      WHERE repo_name = $1
+      ORDER BY file_path ASC
+    `;
+    try {
+      const result = await this.pool.query(sql, [repoName]);
+      return result.rows.map((row) => row.file_path);
+    } catch (err) {
+      throw new StoreError("Failed to get repo files", err);
+    }
+  }
+
   async getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]> {
     const sql = `
       SELECT id, repo_name, file_path, ext, chunk_index, total_chunks, text, embedding

@@ -15,6 +15,7 @@ export interface StoreProvider {
     where?: SearchWhere,
   ): Promise<SearchResult[]>;
 
+  getRepoFiles(repoName: string): Promise<string[]>;
   getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]>;
 
   insertOne(entry: StoreEntry): Promise<void>;

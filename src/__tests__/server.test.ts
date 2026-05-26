@@ -79,8 +79,13 @@ describe("MCP server (integration)", () => {
     toolsList = response.result.tools.map((t) => t.name).toSorted();
   }, 30000);
 
-  it("registers all 3 tools", () => {
-    expect(toolsList).toEqual(["get_file_content", "list_indexed_repos", "search_codebase"]);
+  it("registers all 4 tools", () => {
+    expect(toolsList).toEqual([
+      "get_file_content",
+      "get_repo_structure",
+      "list_indexed_repos",
+      "search_codebase",
+    ]);
   });
 
   it("starts with no indexed repos", async () => {

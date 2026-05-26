@@ -66,6 +66,10 @@ export class EntryStore {
     return this.provider.removeRepoEntries(repoName);
   }
 
+  async getRepoFiles(repoName: string): Promise<string[]> {
+    return this.provider.getRepoFiles(repoName);
+  }
+
   async getFileContent(
     repoName: string,
     filePath: string,

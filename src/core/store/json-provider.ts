@@ -44,6 +44,16 @@ export class JsonProvider implements StoreProvider {
 
   // ── Entry operations ────────────────────────────────────────────────
 
+  async getRepoFiles(repoName: string): Promise<string[]> {
+    const files = new Set<string>();
+    for (const e of this.entries) {
+      if (e.metadata.repoName === repoName) {
+        files.add(e.metadata.filePath);
+      }
+    }
+    return [...files].toSorted();
+  }
+
   async getFileEntries(repoName: string, filePath: string): Promise<StoreEntry[]> {
     return this.entries
       .filter((e) => e.metadata.repoName === repoName && e.metadata.filePath === filePath)
