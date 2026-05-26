@@ -4,7 +4,8 @@ import type { Store } from "../core/store/index.js";
 import { AbortError } from "../core/abort-error.js";
 import { resolveRepo } from "./resolver.js";
 import { scanFiles } from "./scanner.js";
-import { chunkFile, countChunks } from "./chunker.js";
+import { countChunks } from "./chunker.js";
+import { initTreeSitter, chunkWithTreeSitter } from "./tree-sitter.js";
 import { getConfig } from "../core/config.js";
 import simpleGitModule from "simple-git";
 
@@ -99,6 +100,10 @@ export async function indexRepo(
   if (signal?.aborted) {
     throw new AbortError("Cancelled before scanning");
   }
+
+  // Initialize tree-sitter before chunking
+  await initTreeSitter();
+
   progress("scan", 0, 1, `Scanning files in ${localPath}...`);
   console.error(`[indexer] Scanning files in ${localPath}...`);
   let files = scanFiles(localPath);
@@ -171,7 +176,12 @@ export async function indexRepo(
           if (signal?.aborted) {
             throw new AbortError("Cancelled during chunking");
           }
-          const fileChunks = chunkFile(files[fi], repoName);
+          const fileChunks = chunkWithTreeSitter(
+            files[fi].content,
+            files[fi].path,
+            repoName,
+            files[fi].ext,
+          );
           chunkBuffer.push(...fileChunks);
           notify();
           progress("chunk", fi + 1, files.length, `Chunking: ${fi + 1}/${files.length} files`);

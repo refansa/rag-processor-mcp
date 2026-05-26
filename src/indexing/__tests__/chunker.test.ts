@@ -1,5 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileInfo } from "../../core/types.js";
+import { initTreeSitter } from "../tree-sitter.js";
+
+beforeAll(async () => {
+  await initTreeSitter();
+});
 
 beforeEach(() => {
   vi.resetModules();
